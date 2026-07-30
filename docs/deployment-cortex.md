@@ -79,6 +79,19 @@ or persistent volumes are needed on the HK host.
 
 ## Verification
 
+The deployment-specific public branding is declared in
+`deploy/cortex/branding-options.json`. Apply those values through the root-only
+`PUT /api/option/` endpoint after the initial administrator setup.
+
+The homepage body intentionally contains only the Cortex service description.
+The required New API and QuantumNous attribution remains in the site footer.
+Docs and About are disabled in `HeaderNavModules`; the Cortex product and
+documentation destination is `https://withcortex.ai/`.
+
+The logo URL uses the canonical `newapi.withcortex.ai` hostname. While DNS is
+pending, production may temporarily use the DigitalOcean ingress hostname for
+the same `/cortex-logo.svg` asset.
+
 Run the same checks against both public hostnames:
 
 ```bash
