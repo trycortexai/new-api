@@ -1,0 +1,14 @@
+newapicn.withcortex.ai {
+	encode zstd gzip
+
+	reverse_proxy https://newapi.withcortex.ai {
+		header_up Host newapi.withcortex.ai
+		health_uri /api/status
+		health_interval 30s
+		health_timeout 10s
+
+		transport http {
+			tls_server_name newapi.withcortex.ai
+		}
+	}
+}
