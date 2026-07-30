@@ -1,16 +1,14 @@
 newapicn.withcortex.ai {
 	encode zstd gzip
 
-	header {
-		Strict-Transport-Security "max-age=31536000; includeSubDomains"
-		X-Content-Type-Options "nosniff"
-		X-Frame-Options "SAMEORIGIN"
-		Referrer-Policy "strict-origin-when-cross-origin"
-	}
-
-	reverse_proxy new-api:3000 {
+	reverse_proxy https://newapi.withcortex.ai {
+		header_up Host newapi.withcortex.ai
 		health_uri /api/status
 		health_interval 30s
 		health_timeout 10s
+
+		transport http {
+			tls_server_name newapi.withcortex.ai
+		}
 	}
 }

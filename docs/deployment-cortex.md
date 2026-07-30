@@ -6,22 +6,23 @@ This deployment mirrors the existing Cortex API/Edge split without replacing
 | Site | Public hostname | Runtime | Database and cache |
 | --- | --- | --- | --- |
 | International | `newapi.withcortex.ai` | DigitalOcean App Platform, NYC | `new_api` database on `cortex-prod` PostgreSQL 16 and the existing `redis-prod` Redis 7 cluster |
-| Hong Kong | `newapicn.withcortex.ai` | Existing Hong Kong server, Docker Compose behind Caddy | Dedicated PostgreSQL 16 and Redis 7 volumes on the HK server |
+| Hong Kong route | `newapicn.withcortex.ai` | Existing Hong Kong server, Caddy reverse proxy | Uses the international site's PostgreSQL and Redis through `newapi.withcortex.ai` |
 
-The two sites are intentionally isolated. They do not replicate users,
-channels, quotas, tokens, or logs between regions.
+There is one application deployment and one authoritative data plane. The Hong
+Kong endpoint is a stateless acceleration route to the international endpoint;
+it does not run New API, PostgreSQL, or Redis locally.
 
 ## Before deploying
 
 1. Create the `new_api` database and `new_api` database user on the
    `cortex-prod` DigitalOcean PostgreSQL cluster.
-2. Generate an independent `SESSION_SECRET` for each region with at least
-   64 random characters.
+2. Generate a `SESSION_SECRET` with at least 64 random characters for the
+   international deployment.
 3. Confirm that the GitHub App connected to DigitalOcean can read the private
    `trycortexai/new-api` repository.
-4. Make the `ghcr.io/trycortexai/new-api` package readable by the Hong Kong
-   server, or configure a read-only GHCR token there.
-5. Do not attach either deployment to `api.withcortex.ai` or
+4. Confirm that the existing HK Caddy host can reach
+   `https://newapi.withcortex.ai/api/status`.
+5. Do not attach this deployment or route to `api.withcortex.ai` or
    `apicn.withcortex.ai`; those hostnames belong to the existing Cortex API.
 
 ## International site
@@ -51,22 +52,19 @@ doctl apps update <app-id> --spec .do/new-api-intl.yaml
 
 ## Hong Kong site
 
-Copy `deploy/cortex/hk` to the existing HK server. Create `.env` from
-`.env.example`, replace every placeholder, authenticate Docker to GHCR if the
-package is private, and start the stack:
+Add the `deploy/cortex/hk/Caddyfile` site block to the existing HK Caddy
+configuration. It terminates TLS for `newapicn.withcortex.ai`, preserves the
+client-facing forwarded host, and sends the origin request to
+`https://newapi.withcortex.ai` with the correct TLS server name and Host header.
 
 ```bash
-cd deploy/cortex/hk
-cp .env.example .env
-docker compose config
-docker compose pull
-docker compose up -d
+caddy validate --config /etc/caddy/Caddyfile
+sudo systemctl reload caddy
 ```
 
-Point the Cloudflare DNS record for `newapicn.withcortex.ai` at the existing HK
-server only after the stack is healthy. Caddy obtains and renews the public TLS
-certificate and proxies requests to New API over its private Docker network.
-PostgreSQL and Redis are not published on host ports.
+Point the DNS record for `newapicn.withcortex.ai` at the existing HK server
+only after the route is healthy. No application secrets, database credentials,
+or persistent volumes are needed on the HK host.
 
 ## Verification
 
@@ -77,8 +75,10 @@ curl -fsS https://newapi.withcortex.ai/api/status
 curl -fsS https://newapicn.withcortex.ai/api/status
 ```
 
-Both responses must include `"success":true`. Complete the setup wizard
-separately in each region, then create a low-quota test token and verify:
+Both responses must include `"success":true` and report the same New API
+version and setup state. Complete the setup wizard once through the
+international endpoint, then create a low-quota test token and verify the same
+token through both routes:
 
 ```bash
 curl -fsS https://newapi.withcortex.ai/v1/models \
@@ -88,5 +88,6 @@ curl -fsS https://newapicn.withcortex.ai/v1/models \
   -H "Authorization: Bearer <hong-kong-test-token>"
 ```
 
-Do not promote DNS or add real upstream credentials until status, login, token
-creation, model listing, and one streaming completion pass in each region.
+Do not promote the HK DNS route or add real upstream credentials until status,
+login, token creation, model listing, and one streaming completion pass through
+both hostnames.
