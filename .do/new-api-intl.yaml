@@ -1,0 +1,97 @@
+name: cortex-new-api-intl
+region: nyc
+
+domains:
+  - domain: newapi.withcortex.ai
+    type: PRIMARY
+
+alerts:
+  - rule: DEPLOYMENT_FAILED
+  - rule: DOMAIN_FAILED
+  - rule: DEPLOYMENT_LIVE
+  - rule: DOMAIN_LIVE
+
+services:
+  - name: new-api-intl
+    github:
+      repo: trycortexai/new-api
+      branch: main
+      deploy_on_push: true
+    source_dir: /
+    dockerfile_path: Dockerfile
+    http_port: 3000
+    instance_size_slug: apps-s-1vcpu-2gb
+    instance_count: 1
+    health_check:
+      initial_delay_seconds: 10
+      period_seconds: 30
+      timeout_seconds: 10
+      success_threshold: 1
+      failure_threshold: 3
+      http_path: /api/status
+      port: 3000
+    envs:
+      - key: SQL_DSN
+        value: ${new-api-pg.DATABASE_URL}
+        scope: RUN_TIME
+        type: GENERAL
+      - key: REDIS_CONN_STRING
+        value: ${new-api-redis.DATABASE_URL}
+        scope: RUN_TIME
+        type: GENERAL
+      - key: FRONTEND_BASE_URL
+        value: https://newapi.withcortex.ai
+        scope: RUN_TIME
+        type: GENERAL
+      - key: SESSION_COOKIE_SECURE
+        value: "true"
+        scope: RUN_TIME
+        type: GENERAL
+      - key: SESSION_COOKIE_TRUSTED_URL
+        value: https://newapi.withcortex.ai
+        scope: RUN_TIME
+        type: GENERAL
+      - key: TZ
+        value: UTC
+        scope: RUN_TIME
+        type: GENERAL
+      - key: ERROR_LOG_ENABLED
+        value: "true"
+        scope: RUN_TIME
+        type: GENERAL
+      - key: BATCH_UPDATE_ENABLED
+        value: "true"
+        scope: RUN_TIME
+        type: GENERAL
+      - key: NODE_NAME
+        value: new-api-intl-1
+        scope: RUN_TIME
+        type: GENERAL
+      - key: STREAMING_TIMEOUT
+        value: "300"
+        scope: RUN_TIME
+        type: GENERAL
+      - key: RELAY_IDLE_CONN_TIMEOUT
+        value: "90"
+        scope: RUN_TIME
+        type: GENERAL
+    termination:
+      drain_seconds: 30
+      grace_period_seconds: 90
+
+databases:
+  - name: new-api-pg
+    cluster_name: cortex-prod
+    db_name: new_api
+    db_user: new_api
+    engine: PG
+    production: true
+    version: "16"
+  - name: new-api-redis
+    cluster_name: redis-prod
+    engine: REDIS
+    production: true
+    version: "7"
+
+features:
+  - buildpack-stack=ubuntu-22
