@@ -15,14 +15,18 @@ it does not run New API, PostgreSQL, or Redis locally.
 ## Before deploying
 
 1. Create the `new_api` database and `new_api` database user on the
-   `cortex-prod` DigitalOcean PostgreSQL cluster.
+   `cortex-prod` DigitalOcean PostgreSQL cluster. Make `new_api` the owner of
+   the database and its `public` schema so startup migrations can create and
+   alter tables.
 2. Generate a `SESSION_SECRET` with at least 64 random characters for the
    international deployment.
 3. Confirm that the GitHub App connected to DigitalOcean can read the private
    `trycortexai/new-api` repository.
-4. Confirm that the existing HK Caddy host can reach
+4. Authorize the App Platform app in both the `cortex-prod` PostgreSQL and
+   `redis-prod` trusted-source firewalls.
+5. Confirm that the existing HK Caddy host can reach
    `https://newapi.withcortex.ai/api/status`.
-5. Do not attach this deployment or route to `api.withcortex.ai` or
+6. Do not attach this deployment or route to `api.withcortex.ai` or
    `apicn.withcortex.ai`; those hostnames belong to the existing Cortex API.
 
 ## International site
@@ -47,8 +51,15 @@ doctl apps create --spec .do/new-api-intl.yaml
 If the app already exists, update it using its resolved app ID:
 
 ```bash
-doctl apps update <app-id> --spec .do/new-api-intl.yaml
+doctl apps update <app-id> --spec <temporary-spec-with-existing-secret>
 ```
+
+The checked-in spec intentionally does not contain `SESSION_SECRET`. Before
+updating an existing app, merge its current encrypted `SESSION_SECRET` entry
+into an untracked temporary copy of the spec and apply that copy. Never write
+the generated secret or its encrypted value to the repository. After the
+update, confirm that `SESSION_SECRET` is still present with type `SECRET`
+before sending traffic.
 
 ## Hong Kong site
 

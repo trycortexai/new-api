@@ -23,7 +23,7 @@ services:
     instance_size_slug: apps-s-1vcpu-2gb
     instance_count: 1
     health_check:
-      initial_delay_seconds: 10
+      initial_delay_seconds: 60
       period_seconds: 30
       timeout_seconds: 10
       success_threshold: 1
