@@ -108,13 +108,18 @@ export function Home() {
     }
 
     return (
-      <PublicLayout>
-        <div className='mx-auto max-w-6xl px-4 py-8'>
-          <RichContent
-            mode='markdown'
-            content={content}
-            className='custom-home-content'
-          />
+      <PublicLayout showMainContainer={false}>
+        <div className='flex min-h-svh flex-col'>
+          <main className='container flex-1 px-4 py-6 pt-20 md:px-4'>
+            <div className='mx-auto max-w-6xl px-4 py-8'>
+              <RichContent
+                mode='markdown'
+                content={content}
+                className='custom-home-content'
+              />
+            </div>
+          </main>
+          <Footer />
         </div>
       </PublicLayout>
     )
