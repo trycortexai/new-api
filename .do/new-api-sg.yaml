@@ -143,7 +143,7 @@ databases:
     version: "16"
   - name: new-api-sg-redis
     cluster_name: newapi-sg-redis
-    engine: REDIS
+    engine: VALKEY
     production: true
     version: "8"
 
