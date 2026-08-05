@@ -1,0 +1,151 @@
+name: cortex-new-api-sg
+region: sgp
+vpc:
+  id: 61f2c17a-192c-4057-bfef-6f8cb7f0fc3b
+
+alerts:
+  - rule: DEPLOYMENT_FAILED
+  - rule: DEPLOYMENT_LIVE
+
+services:
+  - name: new-api-sg
+    github:
+      repo: trycortexai/new-api
+      branch: main
+      deploy_on_push: true
+    source_dir: /
+    dockerfile_path: Dockerfile
+    http_port: 3000
+    instance_size_slug: apps-s-1vcpu-2gb
+    instance_count: 1
+    health_check:
+      initial_delay_seconds: 60
+      period_seconds: 30
+      timeout_seconds: 10
+      success_threshold: 1
+      failure_threshold: 3
+      http_path: /api/status
+      port: 3000
+    envs:
+      - key: SQL_DSN
+        value: ${new-api-pg.DATABASE_PRIVATE_URL}
+        scope: RUN_TIME
+        type: GENERAL
+      - key: REDIS_CONN_STRING
+        value: ${new-api-sg-redis.DATABASE_PRIVATE_URL}
+        scope: RUN_TIME
+        type: GENERAL
+      - key: GIN_MODE
+        value: release
+        scope: RUN_TIME
+        type: GENERAL
+      - key: DEBUG
+        value: "false"
+        scope: RUN_TIME
+        type: GENERAL
+      - key: MEMORY_CACHE_ENABLED
+        value: "true"
+        scope: RUN_TIME
+        type: GENERAL
+      - key: SQL_MAX_IDLE_CONNS
+        value: "25"
+        scope: RUN_TIME
+        type: GENERAL
+      - key: SQL_MAX_OPEN_CONNS
+        value: "50"
+        scope: RUN_TIME
+        type: GENERAL
+      - key: SQL_MAX_LIFETIME
+        value: "300"
+        scope: RUN_TIME
+        type: GENERAL
+      - key: SQL_SLOW_THRESHOLD_MS
+        value: "100"
+        scope: RUN_TIME
+        type: GENERAL
+      - key: REDIS_POOL_SIZE
+        value: "50"
+        scope: RUN_TIME
+        type: GENERAL
+      - key: SYNC_FREQUENCY
+        value: "60"
+        scope: RUN_TIME
+        type: GENERAL
+      - key: CHANNEL_UPDATE_FREQUENCY
+        value: "30"
+        scope: RUN_TIME
+        type: GENERAL
+      - key: BATCH_UPDATE_ENABLED
+        value: "true"
+        scope: RUN_TIME
+        type: GENERAL
+      - key: BATCH_UPDATE_INTERVAL
+        value: "5"
+        scope: RUN_TIME
+        type: GENERAL
+      - key: DIFY_DEBUG
+        value: "false"
+        scope: RUN_TIME
+        type: GENERAL
+      - key: NODE_NAME
+        value: new-api-sg-1
+        scope: RUN_TIME
+        type: GENERAL
+      # NYC is the schema/task master. Regional replicas connect to the shared
+      # database but must not run AutoMigrate or singleton background jobs.
+      - key: NODE_TYPE
+        value: slave
+        scope: RUN_TIME
+        type: GENERAL
+      - key: STREAMING_TIMEOUT
+        value: "300"
+        scope: RUN_TIME
+        type: GENERAL
+      - key: RELAY_IDLE_CONN_TIMEOUT
+        value: "90"
+        scope: RUN_TIME
+        type: GENERAL
+      - key: RELAY_MAX_IDLE_CONNS
+        value: "500"
+        scope: RUN_TIME
+        type: GENERAL
+      - key: RELAY_MAX_IDLE_CONNS_PER_HOST
+        value: "100"
+        scope: RUN_TIME
+        type: GENERAL
+      - key: RELAY_TIMEOUT
+        value: "0"
+        scope: RUN_TIME
+        type: GENERAL
+      - key: TLS_INSECURE_SKIP_VERIFY
+        value: "false"
+        scope: RUN_TIME
+        type: GENERAL
+      - key: ENABLE_PPROF
+        value: "false"
+        scope: RUN_TIME
+        type: GENERAL
+      - key: ERROR_LOG_ENABLED
+        value: "true"
+        scope: RUN_TIME
+        type: GENERAL
+    termination:
+      drain_seconds: 30
+      grace_period_seconds: 90
+
+databases:
+  - name: new-api-pg
+    cluster_name: cortex-prod
+    db_name: new_api
+    db_user: new_api
+    engine: PG
+    production: true
+    version: "16"
+  - name: new-api-sg-redis
+    cluster_name: newapi-sg-redis
+    engine: VALKEY
+    production: true
+    version: "8"
+
+features:
+  - buildpack-stack=ubuntu-22
