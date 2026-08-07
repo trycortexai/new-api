@@ -84,3 +84,9 @@ This intentionally measures the trade-off of local application/cache access
 against cross-region PostgreSQL reads and quota writes. Five sequential samples
 are useful as a smoke comparison, not as a capacity test or a statistically
 stable latency distribution.
+
+## Streaming capacity benchmark
+
+The [streaming load benchmark](STRESS_BENCHMARK.md) records the 2026-08-07
+fake-model concurrency ramp, transport controls, resource evidence, and the
+two-minute `claude-sonnet-5` c300 result.
