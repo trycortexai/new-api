@@ -96,20 +96,20 @@ redirected to `/dashboard/overview` and unauthenticated visitors are redirected
 to `/sign-in`.
 
 OAuth callback validation accepts only the canonical origin and the exact
-origins configured in `SESSION_COOKIE_TRUSTED_URL`. Every enabled provider must
-register its callback separately for all three checked deployment origins;
-registering only the canonical callback is not sufficient:
+origins configured in `SESSION_COOKIE_TRUSTED_URL`. Provider registration
+depends on the provider's callback model:
 
-| Provider     | Exact callbacks to register                                                                                                                                                                        |
-| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GitHub       | `https://newapi.withcortex.ai/oauth/github`<br>`https://llmapi.withcortex.ai/oauth/github`<br>`https://newapicn.withcortex.ai/oauth/github`                                                        |
-| Discord      | `https://newapi.withcortex.ai/oauth/discord`<br>`https://llmapi.withcortex.ai/oauth/discord`<br>`https://newapicn.withcortex.ai/oauth/discord`                                                     |
-| OIDC         | `https://newapi.withcortex.ai/oauth/oidc`<br>`https://llmapi.withcortex.ai/oauth/oidc`<br>`https://newapicn.withcortex.ai/oauth/oidc`                                                              |
-| LinuxDO      | `https://newapi.withcortex.ai/oauth/linuxdo`<br>`https://llmapi.withcortex.ai/oauth/linuxdo`<br>`https://newapicn.withcortex.ai/oauth/linuxdo`                                                     |
-| Custom OAuth | `https://newapi.withcortex.ai/oauth/<slug>`<br>`https://llmapi.withcortex.ai/oauth/<slug>`<br>`https://newapicn.withcortex.ai/oauth/<slug>` (replace `<slug>` with the provider's configured slug) |
+| Provider     | Registration requirement                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| GitHub       | Register only `https://newapi.withcortex.ai/oauth/github`. A GitHub OAuth App has one callback setting, but GitHub's documented matching accepts `https://llmapi.withcortex.ai/oauth/github` and `https://newapicn.withcortex.ai/oauth/github` because the host excluding subdomains, port, and callback path match. See [GitHub's redirect URL rules](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps#redirect-urls). |
+| Discord      | Register all three exact callbacks: `https://newapi.withcortex.ai/oauth/discord`, `https://llmapi.withcortex.ai/oauth/discord`, and `https://newapicn.withcortex.ai/oauth/discord`. [Discord applications expose a `redirect_uris` list](https://docs.discord.com/developers/resources/application#application-object-application-structure).                                                                                                                |
+| OIDC         | Register all three exact callbacks: `https://newapi.withcortex.ai/oauth/oidc`, `https://llmapi.withcortex.ai/oauth/oidc`, and `https://newapicn.withcortex.ai/oauth/oidc`. [OIDC clients define a `redirect_uris` array](https://openid.net/specs/openid-connect-registration-1_0.html#ClientMetadata); every used value must be registered exactly.                                                                                                         |
+| LinuxDO      | Register the three `/oauth/linuxdo` callbacks only if the provider client supports multiple callback URLs. Do not assume GitHub-style subdomain matching.                                                                                                                                                                                                                                                                                                    |
+| Custom OAuth | Replace `<slug>` in `/oauth/<slug>` and register each exact origin supported by that provider. If it accepts only one callback, expose login only on that supported origin or configure separate provider credentials; do not weaken the gateway's origin validation.                                                                                                                                                                                        |
 
 Keep the three origins in `.do/new-api-intl.yaml`'s
-`SESSION_COOKIE_TRUSTED_URL` value synchronized with provider registrations.
+`SESSION_COOKIE_TRUSTED_URL` value synchronized with the callback origins each
+provider supports.
 Authorization and token exchange use the initiating origin bound to the
 one-time OAuth state; exact-origin validation must not be replaced with
 wildcards.

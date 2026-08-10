@@ -3,6 +3,7 @@ package controller
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -33,7 +34,7 @@ type oauthFlowPayload struct {
 	RedirectURI   string `json:"redirect_uri"`
 }
 
-func isAllowedOAuthOrigin(origin string) bool {
+func isConfiguredOAuthOrigin(origin string) bool {
 	canonicalOrigin, err := common.NormalizeOrigin(system_setting.ServerAddress)
 	if err == nil && origin == canonicalOrigin {
 		return true
@@ -45,6 +46,57 @@ func isAllowedOAuthOrigin(origin string) bool {
 		}
 	}
 	return false
+}
+
+func isHTTPLoopbackOrigin(origin string) bool {
+	parsedOrigin, err := url.Parse(origin)
+	if err != nil || parsedOrigin.Scheme != "http" {
+		return false
+	}
+	hostname := strings.ToLower(parsedOrigin.Hostname())
+	if hostname == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(hostname)
+	return ip != nil && ip.IsLoopback()
+}
+
+func isInsecureLocalDevelopmentOAuthOrigin(origin string) bool {
+	// The documented Rsbuild proxy runs on a different loopback port from the
+	// backend. Keep that callback same-origin with the dev UI so login storage
+	// and the binding popup handshake continue to work. This exception cannot
+	// activate for an HTTPS or non-loopback deployment.
+	if common.SessionCookieSecure || !isHTTPLoopbackOrigin(origin) {
+		return false
+	}
+	canonicalOrigin, err := common.NormalizeOrigin(system_setting.ServerAddress)
+	return err == nil && isHTTPLoopbackOrigin(canonicalOrigin)
+}
+
+func isAllowedOAuthOrigin(origin string) bool {
+	return isConfiguredOAuthOrigin(origin) || isInsecureLocalDevelopmentOAuthOrigin(origin)
+}
+
+func isAllowedOAuthStartOrigin(requestedOrigin string, request *http.Request) bool {
+	origin, err := common.NormalizeOrigin(requestedOrigin)
+	if err != nil {
+		return false
+	}
+	if isConfiguredOAuthOrigin(origin) {
+		return true
+	}
+	if !isInsecureLocalDevelopmentOAuthOrigin(origin) {
+		return false
+	}
+	// SESSION_COOKIE_TRUSTED_URL intentionally cannot be configured in insecure
+	// mode. Bind the one local exception to the browser's exact Origin instead
+	// of accepting an arbitrary loopback port supplied only in JSON.
+	originValues := request.Header.Values("Origin")
+	if len(originValues) != 1 || strings.Contains(originValues[0], ",") {
+		return false
+	}
+	normalizedBrowserOrigin, err := common.NormalizeOrigin(originValues[0])
+	return err == nil && normalizedBrowserOrigin == origin
 }
 
 func validateOAuthCallbackURI(provider, callbackURI string) (string, error) {
@@ -98,6 +150,13 @@ func GenerateOAuthCode(c *gin.Context) {
 		len(request.Aff) > 32 ||
 		(request.Intent == model.AuthFlowIntentBind && request.Aff != "") {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+	if request.RedirectOrigin != "" && !isAllowedOAuthStartOrigin(request.RedirectOrigin, c.Request) {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": i18n.T(c, i18n.MsgInvalidParams),
+		})
 		return
 	}
 	redirectURI, err := resolveOAuthCallbackURI(request.Provider, request.RedirectOrigin)

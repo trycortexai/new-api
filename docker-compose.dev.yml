@@ -31,7 +31,8 @@ services:
       - REDIS_CONN_STRING=redis://redis
       - TZ=Asia/Shanghai
       - BATCH_UPDATE_ENABLED=true
-      # Local HTTP dev mode: keep Secure=false and leave TRUSTED_URL unset. This disables the refresh/logout OriginGuard so the :5173 -> :3000 dev proxy works.
+      # Local HTTP dev mode: keep Secure=false and leave TRUSTED_URL unset. Refresh/logout use the :5173 -> :3000 proxy, and OAuth accepts the exact browser Origin only when both it and ServerAddress are HTTP loopback origins.
+      # Register http://localhost:5173/oauth/<provider> on the development OAuth client so login and account binding return to the same dev-server origin.
       - SESSION_COOKIE_SECURE=false
       # For HTTPS only: set Secure=true and list every exact trusted HTTPS browser Origin. This does not configure relay CORS.
       # - SESSION_COOKIE_SECURE=true

@@ -135,23 +135,18 @@ type OAuthSetupGuideRow = {
 type OAuthSetupGuideProps = {
   title: string
   description: ReactNode
+  registrationGuidance: ReactNode
   rows: OAuthSetupGuideRow[]
   children?: ReactNode
 }
 
 function OAuthSetupGuide(props: OAuthSetupGuideProps) {
-  const { t } = useTranslation()
-
   return (
     <Alert className='lg:col-span-2'>
       <AlertTitle>{props.title}</AlertTitle>
       <AlertDescription className='space-y-3 text-sm'>
         <div>{props.description}</div>
-        <p>
-          {t(
-            'Register the displayed callback and the same path on every exact origin configured in SESSION_COOKIE_TRUSTED_URL. Each URL must be registered separately.'
-          )}
-        </p>
+        <div>{props.registrationGuidance}</div>
         <div className='space-y-2'>
           {props.rows.map((row) => (
             <div
@@ -400,6 +395,9 @@ export function OAuthSection(props: OAuthSectionProps) {
                   description={t(
                     'Set these values in the provider application before enabling login.'
                   )}
+                  registrationGuidance={t(
+                    'GitHub OAuth Apps accept one callback URL. Register the displayed canonical callback; GitHub also accepts the same path on trusted subdomains of the registered host.'
+                  )}
                   rows={[
                     {
                       label: t('Homepage URL'),
@@ -490,6 +488,9 @@ export function OAuthSection(props: OAuthSectionProps) {
                   title={t('Setup guide')}
                   description={t(
                     'Set these values in the provider application before enabling login.'
+                  )}
+                  registrationGuidance={t(
+                    'Register the displayed callback and the same path on every exact origin configured in SESSION_COOKIE_TRUSTED_URL. Each URL must be registered separately.'
                   )}
                   rows={[
                     {
@@ -593,6 +594,9 @@ export function OAuthSection(props: OAuthSectionProps) {
                       </p>
                     </div>
                   }
+                  registrationGuidance={t(
+                    'Register the displayed callback and the same path on every exact origin configured in SESSION_COOKIE_TRUSTED_URL. Each URL must be registered separately.'
+                  )}
                   rows={[
                     {
                       label: t('Homepage URL'),
@@ -890,6 +894,9 @@ export function OAuthSection(props: OAuthSectionProps) {
                   title={t('Setup guide')}
                   description={t(
                     'Set these values in the provider application before enabling login.'
+                  )}
+                  registrationGuidance={t(
+                    'If the provider supports multiple callback URLs, register the displayed path on every exact origin configured in SESSION_COOKIE_TRUSTED_URL. Otherwise, use only callback origins supported by that provider.'
                   )}
                   rows={[
                     {
