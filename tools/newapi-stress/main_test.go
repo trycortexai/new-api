@@ -2,8 +2,10 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"net/http"
@@ -625,6 +627,54 @@ func TestSSEReaderRejectsUnterminatedEvent(t *testing.T) {
 	_, err := readSSEEvent(bufioReader("data: [DONE]"))
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errMalformedSSE)
+}
+
+func TestSSEReaderRejectsLineBeforeItCanGrowWithoutBound(t *testing.T) {
+	line := "data: " + strings.Repeat("x", maxSSELineBytes) + "\n\n"
+
+	_, err := readSSEEvent(bufioReader(line))
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errMalformedSSE)
+	assert.Contains(t, err.Error(), "line exceeds")
+}
+
+func TestValidateStreamRejectsCumulativeContentOverLimit(t *testing.T) {
+	const chunkBytes = 256 << 10
+	var stream strings.Builder
+	for buffered := 0; buffered <= maxStreamContentBytes; buffered += chunkBytes {
+		stream.WriteString("data: {\"choices\":[{\"delta\":{\"content\":")
+		stream.WriteString(fmt.Sprintf("%q", strings.Repeat("x", chunkBytes)))
+		stream.WriteString("},\"finish_reason\":null}]}\n\n")
+	}
+	runner := &runner{cfg: testConfig("https://example.test/v1")}
+	result := sample{}
+
+	err := runner.validateStream(io.NopCloser(strings.NewReader(stream.String())), time.Now(), &result)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errMalformedSSE)
+	assert.Contains(t, err.Error(), "stream content exceeds")
+}
+
+func TestParseConfigUsesCommandFlagSetAndPreservesHelp(t *testing.T) {
+	const unrelatedFlag = "newapi-stress-unrelated-common-flag"
+	flag.CommandLine.Bool(unrelatedFlag, false, "must not appear in command help")
+
+	for _, helpArg := range []string{"-h", "--help"} {
+		t.Run(helpArg, func(t *testing.T) {
+			var output bytes.Buffer
+			_, err := parseConfig([]string{helpArg}, &output)
+			assert.ErrorIs(t, err, flag.ErrHelp)
+			assert.Contains(t, output.String(), "-target")
+			assert.NotContains(t, output.String(), unrelatedFlag)
+		})
+	}
+
+	var output bytes.Buffer
+	_, err := parseConfig([]string{"--" + unrelatedFlag}, &output)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "flag provided but not defined")
 }
 
 func bufioReader(value string) *bufio.Reader {

@@ -39,7 +39,9 @@ const (
 	defaultStageDuration   = 3 * time.Minute
 	fakeInputTokens        = int64(20_000)
 	fakeOutputTokens       = int64(2_000)
+	maxSSELineBytes        = 1 << 20
 	maxSSEEventBytes       = 4 << 20
+	maxStreamContentBytes  = 4 << 20
 	maxLatencySamples      = 100_000
 	fakeContentMarker      = "cortex-fake-llm"
 	paidSonnetModel        = "claude-sonnet-5"
@@ -612,6 +614,9 @@ func (r *runner) validateStream(body io.ReadCloser, started time.Time, result *s
 				if result.TTFTMS == 0 {
 					result.TTFTMS = milliseconds(time.Since(started))
 				}
+				if len(choice.Delta.Content) > maxStreamContentBytes-content.Len() {
+					return fmt.Errorf("%w: stream content exceeds %d bytes", errMalformedSSE, maxStreamContentBytes)
+				}
 				content.WriteString(choice.Delta.Content)
 			}
 			if choice.FinishReason != nil {
@@ -677,34 +682,62 @@ func nextSSEEvent(reader *bufio.Reader, body io.Closer, idleTimeout time.Duratio
 }
 
 func readSSEEvent(reader *bufio.Reader) (sseEvent, error) {
-	var data []string
+	var data strings.Builder
+	hasData := false
 	bytesRead := 0
 	for {
-		line, err := reader.ReadString('\n')
+		line, err := readSSELine(reader)
 		if err != nil && len(line) == 0 {
-			if len(data) > 0 {
+			if hasData {
 				return sseEvent{}, fmt.Errorf("%w: unterminated event", errMalformedSSE)
 			}
 			return sseEvent{}, err
 		}
-		line = strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r")
 		bytesRead += len(line)
 		if bytesRead > maxSSEEventBytes {
 			return sseEvent{}, fmt.Errorf("%w: event exceeds %d bytes", errMalformedSSE, maxSSEEventBytes)
 		}
 		if line == "" {
-			if len(data) > 0 {
-				return sseEvent{Data: strings.Join(data, "\n")}, nil
+			if hasData {
+				return sseEvent{Data: data.String()}, nil
 			}
 			continue
 		}
 		if strings.HasPrefix(line, "data:") {
 			value := strings.TrimPrefix(line, "data:")
-			data = append(data, strings.TrimPrefix(value, " "))
+			value = strings.TrimPrefix(value, " ")
+			separatorBytes := 0
+			if hasData {
+				separatorBytes = 1
+			}
+			if len(value)+separatorBytes > maxSSEEventBytes-data.Len() {
+				return sseEvent{}, fmt.Errorf("%w: event data exceeds %d bytes", errMalformedSSE, maxSSEEventBytes)
+			}
+			if hasData {
+				data.WriteByte('\n')
+			}
+			data.WriteString(value)
+			hasData = true
 		}
 		if err != nil {
 			return sseEvent{}, fmt.Errorf("%w: unterminated event", errMalformedSSE)
 		}
+	}
+}
+
+func readSSELine(reader *bufio.Reader) (string, error) {
+	var line bytes.Buffer
+	for {
+		fragment, err := reader.ReadSlice('\n')
+		if len(fragment) > maxSSELineBytes-line.Len() {
+			return "", fmt.Errorf("%w: line exceeds %d bytes", errMalformedSSE, maxSSELineBytes)
+		}
+		_, _ = line.Write(fragment)
+		if errors.Is(err, bufio.ErrBufferFull) {
+			continue
+		}
+		value := strings.TrimSuffix(strings.TrimSuffix(line.String(), "\n"), "\r")
+		return value, err
 	}
 }
 
@@ -928,31 +961,38 @@ func (a *artifacts) finish(report runSummary) error {
 	return resultErr
 }
 
-func parseConfig() config {
+func parseConfig(args []string, output io.Writer) (config, error) {
 	cfg := config{}
-	flag.StringVar(&cfg.Target, "target", defaultTarget, "base URL or full Chat Completions endpoint")
-	flag.StringVar(&cfg.Model, "model", defaultModel, "model ID")
-	flag.IntVar(&cfg.StartConcurrency, "start-concurrency", defaultConcurrency, "first closed-loop stage concurrency")
-	flag.IntVar(&cfg.MaxConcurrency, "max-concurrency", defaultMaxConcurrency, "hard concurrency ceiling")
-	flag.DurationVar(&cfg.StageDuration, "stage-duration", defaultStageDuration, "request scheduling duration per stage")
-	flag.Float64Var(&cfg.SuccessThreshold, "success-threshold", .90, "stop when stage success rate is below this fraction")
-	flag.BoolVar(&cfg.PreflightOnly, "preflight-only", false, "run exactly one validated request and skip all load stages")
-	flag.StringVar(&cfg.OutputDir, "output-dir", "stress-results", "artifact directory")
-	flag.StringVar(&cfg.RunID, "run-id", "", "run identifier; defaults to a UTC timestamp")
-	flag.DurationVar(&cfg.ConnectTimeout, "connect-timeout", 10*time.Second, "TCP connection timeout")
-	flag.DurationVar(&cfg.HeaderTimeout, "header-timeout", 20*time.Second, "response header timeout")
-	flag.DurationVar(&cfg.IdleTimeout, "idle-timeout", 20*time.Second, "maximum gap between SSE events")
-	flag.DurationVar(&cfg.RequestTimeout, "request-timeout", 90*time.Second, "per-request deadline")
-	flag.StringVar(&cfg.HTTPVersion, "http-version", defaultHTTPVersion, "HTTP protocol to require: 1.1 or 2")
-	flag.BoolVar(&cfg.AllowPaidSonnet, "allow-paid-sonnet", false, "explicitly allow billed claude-sonnet-5 traffic")
-	flag.Float64Var(&cfg.MaxCostUSD, "max-cost-usd", 0, "paid Sonnet estimated list-cost scheduling cap (required, max 2)")
-	flag.IntVar(&cfg.MaxRequests, "max-requests", 0, "paid Sonnet hard request cap including preflight (required, max 50000)")
-	flag.Parse()
+	flags := flag.NewFlagSet("newapi-stress", flag.ContinueOnError)
+	flags.SetOutput(output)
+	flags.StringVar(&cfg.Target, "target", defaultTarget, "base URL or full Chat Completions endpoint")
+	flags.StringVar(&cfg.Model, "model", defaultModel, "model ID")
+	flags.IntVar(&cfg.StartConcurrency, "start-concurrency", defaultConcurrency, "first closed-loop stage concurrency")
+	flags.IntVar(&cfg.MaxConcurrency, "max-concurrency", defaultMaxConcurrency, "hard concurrency ceiling")
+	flags.DurationVar(&cfg.StageDuration, "stage-duration", defaultStageDuration, "request scheduling duration per stage")
+	flags.Float64Var(&cfg.SuccessThreshold, "success-threshold", .90, "stop when stage success rate is below this fraction")
+	flags.BoolVar(&cfg.PreflightOnly, "preflight-only", false, "run exactly one validated request and skip all load stages")
+	flags.StringVar(&cfg.OutputDir, "output-dir", "stress-results", "artifact directory")
+	flags.StringVar(&cfg.RunID, "run-id", "", "run identifier; defaults to a UTC timestamp")
+	flags.DurationVar(&cfg.ConnectTimeout, "connect-timeout", 10*time.Second, "TCP connection timeout")
+	flags.DurationVar(&cfg.HeaderTimeout, "header-timeout", 20*time.Second, "response header timeout")
+	flags.DurationVar(&cfg.IdleTimeout, "idle-timeout", 20*time.Second, "maximum gap between SSE events")
+	flags.DurationVar(&cfg.RequestTimeout, "request-timeout", 90*time.Second, "per-request deadline")
+	flags.StringVar(&cfg.HTTPVersion, "http-version", defaultHTTPVersion, "HTTP protocol to require: 1.1 or 2")
+	flags.BoolVar(&cfg.AllowPaidSonnet, "allow-paid-sonnet", false, "explicitly allow billed claude-sonnet-5 traffic")
+	flags.Float64Var(&cfg.MaxCostUSD, "max-cost-usd", 0, "paid Sonnet estimated list-cost scheduling cap (required, max 2)")
+	flags.IntVar(&cfg.MaxRequests, "max-requests", 0, "paid Sonnet hard request cap including preflight (required, max 50000)")
+	if err := flags.Parse(args); err != nil {
+		return config{}, err
+	}
+	if flags.NArg() != 0 {
+		return config{}, fmt.Errorf("unexpected positional arguments: %s", strings.Join(flags.Args(), " "))
+	}
 	cfg.APIKey = os.Getenv(defaultAPIKeyEnv)
 	if cfg.RunID == "" {
 		cfg.RunID = "newapi-stress-" + time.Now().UTC().Format("20060102T150405.000000000Z")
 	}
-	return cfg
+	return cfg, nil
 }
 
 func run(ctx context.Context, cfg config) (samplesPath, summaryPath string, returnErr error) {
@@ -1041,7 +1081,13 @@ func run(ctx context.Context, cfg config) (samplesPath, summaryPath string, retu
 }
 
 func main() {
-	cfg := parseConfig()
+	cfg, err := parseConfig(os.Args[1:], os.Stderr)
+	if err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return
+		}
+		os.Exit(2)
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	samplesPath, summaryPath, err := run(ctx, cfg)
 	stop()

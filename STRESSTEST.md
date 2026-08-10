@@ -233,9 +233,36 @@ Before proceeding:
 4. Confirm the fake ramp has finished and no other generator process is active.
 
 The approved c300, two-minute example has a $1 estimate cap and a 50,000-request
-hard cap. The runner limits `max_tokens` to two and sends no retries.
+hard cap. The runner limits `max_tokens` to two and sends no retries. Run paid
+preflight as a separate command. The later load command performs its own
+preflight too, so include both requests when reconciling usage and billing.
 
-Local example:
+Local paid preflight:
+
+```bash
+LOCAL_SONNET_PREFLIGHT_ID="local-sonnet-preflight-$(date -u +%Y%m%dT%H%M%SZ)"
+
+go run ./tools/newapi-stress \
+  --target 'https://<api-base-url>/v1' \
+  --run-id "$LOCAL_SONNET_PREFLIGHT_ID" \
+  --model claude-sonnet-5 \
+  --allow-paid-sonnet \
+  --preflight-only \
+  --start-concurrency 300 \
+  --max-concurrency 300 \
+  --stage-duration 2m \
+  --max-cost-usd 1 \
+  --max-requests 50000 \
+  --http-version 2 \
+  --output-dir "$LOCAL_RUN_ROOT"
+
+jq '{run_id, model, preflight, total_usage, stop_reason}' \
+  "$LOCAL_RUN_ROOT/$LOCAL_SONNET_PREFLIGHT_ID/summary.json"
+```
+
+Confirm `preflight.success` is true, `preflight.usage_known` is true, the
+content and token counts are expected, and the account billing delta is
+plausible. Stop if any check fails. After that inspection, run the local load:
 
 ```bash
 go run ./tools/newapi-stress \
@@ -251,7 +278,45 @@ go run ./tools/newapi-stress \
   --output-dir "$LOCAL_RUN_ROOT"
 ```
 
-DigitalOcean example using the existing temporary generator:
+For DigitalOcean, run and inspect a separate paid preflight on the existing
+temporary generator before load:
+
+```bash
+SONNET_PREFLIGHT_RUN_ID="do-sonnet-preflight-${LOAD_STAMP}"
+
+printf '%s\n' "$NEW_API_KEY" | ssh -i "$SSH_PRIVATE_KEY" \
+  -o IdentitiesOnly=yes \
+  -o UserKnownHostsFile="$KNOWN_HOSTS_FILE" \
+  -o StrictHostKeyChecking=yes \
+  "root@${DROPLET_IP}" \
+  'IFS= read -r NEW_API_KEY && export NEW_API_KEY &&
+   /root/newapi-stress \
+     --target "https://<api-base-url>/v1" \
+     --run-id '"$SONNET_PREFLIGHT_RUN_ID"' \
+     --model claude-sonnet-5 \
+     --allow-paid-sonnet \
+     --preflight-only \
+     --start-concurrency 300 \
+     --max-concurrency 300 \
+     --stage-duration 2m \
+     --max-cost-usd 1 \
+     --max-requests 50000 \
+     --http-version 2 \
+     --output-dir /root/stress-results'
+
+scp -i "$SSH_PRIVATE_KEY" \
+  -o IdentitiesOnly=yes \
+  -o UserKnownHostsFile="$KNOWN_HOSTS_FILE" \
+  -o StrictHostKeyChecking=yes \
+  "root@${DROPLET_IP}:/root/stress-results/${SONNET_PREFLIGHT_RUN_ID}/summary.json" \
+  "$DO_RUN_TMP/sonnet-preflight-summary.json"
+
+jq '{run_id, model, preflight, total_usage, stop_reason}' \
+  "$DO_RUN_TMP/sonnet-preflight-summary.json"
+```
+
+Confirm the same success, usage, content, and billing checks before starting
+the DigitalOcean load:
 
 ```bash
 SONNET_RUN_ID="do-sonnet-c300-${LOAD_STAMP}"
