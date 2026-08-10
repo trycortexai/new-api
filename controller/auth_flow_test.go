@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,8 +11,10 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/oauth"
+	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
@@ -20,16 +23,18 @@ import (
 )
 
 type authFlowTestOAuthProvider struct {
-	exchangeErr   error
-	userInfoErr   error
-	exchangeCalls int
-	userInfoCalls int
+	exchangeErr          error
+	userInfoErr          error
+	exchangeCalls        int
+	userInfoCalls        int
+	exchangedRedirectURI string
 }
 
 func (*authFlowTestOAuthProvider) GetName() string { return "Auth Flow Test" }
 func (*authFlowTestOAuthProvider) IsEnabled() bool { return true }
-func (provider *authFlowTestOAuthProvider) ExchangeToken(context.Context, string, *gin.Context) (*oauth.OAuthToken, error) {
+func (provider *authFlowTestOAuthProvider) ExchangeToken(_ context.Context, _ string, redirectURI string) (*oauth.OAuthToken, error) {
 	provider.exchangeCalls++
+	provider.exchangedRedirectURI = redirectURI
 	if provider.exchangeErr != nil {
 		return nil, provider.exchangeErr
 	}
@@ -49,6 +54,7 @@ func (*authFlowTestOAuthProvider) GetProviderPrefix() string                    
 
 func setupAuthFlowControllerTest(t *testing.T) *authFlowTestOAuthProvider {
 	t.Helper()
+	require.NoError(t, i18n.Init())
 	previousDB := model.DB
 	previousType := common.MainDatabaseType()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
@@ -93,6 +99,345 @@ func TestGenerateOAuthCodeCarriesAffiliateInLoginFlow(t *testing.T) {
 	assert.Equal(t, "invite-code", payload.AffiliateCode)
 	assert.Zero(t, flow.UserId)
 	assert.Empty(t, flow.SessionId)
+}
+
+func TestGenerateOAuthCodeBindsAnExactAllowedCallbackURI(t *testing.T) {
+	provider := setupAuthFlowControllerTest(t)
+	oauth.RegisterCustom("auth-flow-custom", provider)
+	previousAddress := system_setting.ServerAddress
+	previousTrustedURLs := common.SessionCookieTrustedURLs
+	system_setting.ServerAddress = "https://newapi.withcortex.ai/"
+	common.SessionCookieTrustedURLs = []string{
+		"https://newapi.withcortex.ai",
+		"https://llmapi.withcortex.ai",
+		"https://newapicn.withcortex.ai",
+	}
+	t.Cleanup(func() {
+		oauth.UnregisterCustomProvider("auth-flow-custom")
+		system_setting.ServerAddress = previousAddress
+		common.SessionCookieTrustedURLs = previousTrustedURLs
+	})
+
+	tests := []struct {
+		name           string
+		provider       string
+		redirectOrigin string
+		wantCallback   string
+	}{
+		{
+			name:           "canonical origin",
+			provider:       "auth-flow-custom",
+			redirectOrigin: "https://newapi.withcortex.ai",
+			wantCallback:   "https://newapi.withcortex.ai/oauth/auth-flow-custom",
+		},
+		{
+			name:           "GitHub trusted alias origin",
+			provider:       "github",
+			redirectOrigin: "https://llmapi.withcortex.ai",
+			wantCallback:   "https://llmapi.withcortex.ai/oauth/github",
+		},
+		{
+			name:           "Discord trusted alias origin",
+			provider:       "discord",
+			redirectOrigin: "https://newapicn.withcortex.ai",
+			wantCallback:   "https://newapicn.withcortex.ai/oauth/discord",
+		},
+		{
+			name:           "OIDC trusted alias origin",
+			provider:       "oidc",
+			redirectOrigin: "https://llmapi.withcortex.ai",
+			wantCallback:   "https://llmapi.withcortex.ai/oauth/oidc",
+		},
+		{
+			name:         "missing origin falls back to canonical",
+			provider:     "auth-flow-test",
+			wantCallback: "https://newapi.withcortex.ai/oauth/auth-flow-test",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			body := fmt.Sprintf(`{"provider":%q,"intent":"login"}`, test.provider)
+			if test.redirectOrigin != "" {
+				body = fmt.Sprintf(`{"provider":%q,"intent":"login","redirect_origin":%q}`, test.provider, test.redirectOrigin)
+			}
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Request = httptest.NewRequest(http.MethodPost, "/api/oauth/state", strings.NewReader(body))
+			c.Request.Header.Set("Content-Type", "application/json")
+
+			GenerateOAuthCode(c)
+
+			require.Equal(t, http.StatusOK, recorder.Code)
+			var response struct {
+				Success bool `json:"success"`
+				Data    struct {
+					FlowToken   string `json:"flow_token"`
+					RedirectURI string `json:"redirect_uri"`
+				} `json:"data"`
+			}
+			require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+			require.True(t, response.Success)
+			assert.Equal(t, test.wantCallback, response.Data.RedirectURI)
+
+			flow, err := model.GetAuthFlow(response.Data.FlowToken, model.AuthFlowMatch{
+				Purpose: model.AuthFlowPurposeOAuth, Provider: test.provider, Intent: model.AuthFlowIntentLogin,
+			})
+			require.NoError(t, err)
+			var payload oauthFlowPayload
+			require.NoError(t, common.UnmarshalJsonStr(flow.Payload, &payload))
+			assert.Equal(t, test.wantCallback, payload.RedirectURI)
+		})
+	}
+}
+
+func TestGenerateOAuthCodeRejectsCanonicalOnlyProvidersOnTrustedAliases(t *testing.T) {
+	provider := setupAuthFlowControllerTest(t)
+	oauth.RegisterCustom("auth-flow-custom", provider)
+	previousAddress := system_setting.ServerAddress
+	previousTrustedURLs := common.SessionCookieTrustedURLs
+	system_setting.ServerAddress = "https://newapi.withcortex.ai"
+	common.SessionCookieTrustedURLs = []string{"https://llmapi.withcortex.ai"}
+	t.Cleanup(func() {
+		oauth.UnregisterCustomProvider("auth-flow-custom")
+		system_setting.ServerAddress = previousAddress
+		common.SessionCookieTrustedURLs = previousTrustedURLs
+	})
+
+	for _, provider := range []string{"linuxdo", "auth-flow-custom"} {
+		t.Run(provider, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			body := fmt.Sprintf(`{"provider":%q,"intent":"login","redirect_origin":"https://llmapi.withcortex.ai"}`, provider)
+			c.Request = httptest.NewRequest(http.MethodPost, "/api/oauth/state", strings.NewReader(body))
+			c.Request.Header.Set("Content-Type", "application/json")
+
+			GenerateOAuthCode(c)
+
+			assert.Equal(t, http.StatusBadRequest, recorder.Code)
+		})
+	}
+}
+
+func TestGenerateOAuthCodeRejectsUntrustedCallbackOrigins(t *testing.T) {
+	setupAuthFlowControllerTest(t)
+	previousAddress := system_setting.ServerAddress
+	previousTrustedURLs := common.SessionCookieTrustedURLs
+	system_setting.ServerAddress = "https://newapi.withcortex.ai"
+	common.SessionCookieTrustedURLs = []string{"https://llmapi.withcortex.ai"}
+	t.Cleanup(func() {
+		system_setting.ServerAddress = previousAddress
+		common.SessionCookieTrustedURLs = previousTrustedURLs
+	})
+
+	tests := []struct {
+		name   string
+		origin string
+	}{
+		{name: "suffix attack", origin: "https://llmapi.withcortex.ai.evil.test"},
+		{name: "scheme downgrade", origin: "http://llmapi.withcortex.ai"},
+		{name: "path-bearing URL", origin: "https://llmapi.withcortex.ai/callback"},
+		{name: "unlisted origin", origin: "https://unlisted.withcortex.ai"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			body := fmt.Sprintf(`{"provider":"auth-flow-test","intent":"login","redirect_origin":%q}`, test.origin)
+			c.Request = httptest.NewRequest(http.MethodPost, "/api/oauth/state", strings.NewReader(body))
+			c.Request.Header.Set("Content-Type", "application/json")
+
+			GenerateOAuthCode(c)
+
+			assert.Equal(t, http.StatusBadRequest, recorder.Code)
+		})
+	}
+}
+
+func TestGenerateOAuthCodeAllowsExactBrowserLoopbackOriginInInsecureDevelopment(t *testing.T) {
+	provider := setupAuthFlowControllerTest(t)
+	oauth.RegisterCustom("auth-flow-custom", provider)
+	previousAddress := system_setting.ServerAddress
+	previousSecure := common.SessionCookieSecure
+	previousTrustedURLs := common.SessionCookieTrustedURLs
+	system_setting.ServerAddress = "http://localhost:3000"
+	common.SessionCookieSecure = false
+	common.SessionCookieTrustedURLs = nil
+	t.Cleanup(func() {
+		oauth.UnregisterCustomProvider("auth-flow-custom")
+		system_setting.ServerAddress = previousAddress
+		common.SessionCookieSecure = previousSecure
+		common.SessionCookieTrustedURLs = previousTrustedURLs
+	})
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/oauth/state", strings.NewReader(
+		`{"provider":"auth-flow-custom","intent":"login","redirect_origin":"http://localhost:5173"}`,
+	))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Request.Header.Set("Origin", "http://localhost:5173")
+
+	GenerateOAuthCode(c)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var response struct {
+		Success bool `json:"success"`
+		Data    struct {
+			FlowToken   string `json:"flow_token"`
+			RedirectURI string `json:"redirect_uri"`
+		} `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+	require.True(t, response.Success)
+	assert.Equal(t, "http://localhost:5173/oauth/auth-flow-custom", response.Data.RedirectURI)
+
+	flow, err := model.GetAuthFlow(response.Data.FlowToken, model.AuthFlowMatch{
+		Purpose: model.AuthFlowPurposeOAuth, Provider: "auth-flow-custom", Intent: model.AuthFlowIntentLogin,
+	})
+	require.NoError(t, err)
+	var payload oauthFlowPayload
+	require.NoError(t, common.UnmarshalJsonStr(flow.Payload, &payload))
+	assert.Equal(t, response.Data.RedirectURI, payload.RedirectURI)
+}
+
+func TestGenerateOAuthCodeAllowsExactBrowserLoopbackOriginForBinding(t *testing.T) {
+	setupAuthFlowControllerTest(t)
+	previousAddress := system_setting.ServerAddress
+	previousSecure := common.SessionCookieSecure
+	previousTrustedURLs := common.SessionCookieTrustedURLs
+	system_setting.ServerAddress = "http://localhost:3000"
+	common.SessionCookieSecure = false
+	common.SessionCookieTrustedURLs = nil
+	t.Cleanup(func() {
+		system_setting.ServerAddress = previousAddress
+		common.SessionCookieSecure = previousSecure
+		common.SessionCookieTrustedURLs = previousTrustedURLs
+	})
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/oauth/state", strings.NewReader(
+		`{"provider":"linuxdo","intent":"bind","redirect_origin":"http://localhost:5173"}`,
+	))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Request.Header.Set("Origin", "http://localhost:5173")
+	c.Set("id", 42)
+	c.Set("session_id", "session-42")
+	c.Set("auth_version", int64(3))
+	c.Set("session_version", int64(2))
+
+	GenerateOAuthCode(c)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var response struct {
+		Success bool `json:"success"`
+		Data    struct {
+			FlowToken   string `json:"flow_token"`
+			RedirectURI string `json:"redirect_uri"`
+		} `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+	require.True(t, response.Success)
+	assert.Equal(t, "http://localhost:5173/oauth/linuxdo", response.Data.RedirectURI)
+
+	flow, err := model.GetAuthFlow(response.Data.FlowToken, model.AuthFlowMatch{
+		Purpose: model.AuthFlowPurposeOAuth, Provider: "linuxdo", Intent: model.AuthFlowIntentBind,
+		UserId: 42, SessionId: "session-42",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 42, flow.UserId)
+	assert.Equal(t, "session-42", flow.SessionId)
+}
+
+func TestGenerateOAuthCodeRejectsUnsafeDevelopmentCallbackOrigins(t *testing.T) {
+	setupAuthFlowControllerTest(t)
+	previousAddress := system_setting.ServerAddress
+	previousSecure := common.SessionCookieSecure
+	previousTrustedURLs := common.SessionCookieTrustedURLs
+	t.Cleanup(func() {
+		system_setting.ServerAddress = previousAddress
+		common.SessionCookieSecure = previousSecure
+		common.SessionCookieTrustedURLs = previousTrustedURLs
+	})
+
+	tests := []struct {
+		name           string
+		serverAddress  string
+		secure         bool
+		redirectOrigin string
+		browserOrigin  string
+	}{
+		{
+			name:           "missing browser origin",
+			serverAddress:  "http://localhost:3000",
+			redirectOrigin: "http://localhost:5173",
+		},
+		{
+			name:           "mismatched browser origin",
+			serverAddress:  "http://localhost:3000",
+			redirectOrigin: "http://localhost:5173",
+			browserOrigin:  "http://localhost:5174",
+		},
+		{
+			name:           "combined browser origins",
+			serverAddress:  "http://localhost:3000",
+			redirectOrigin: "http://localhost:5173",
+			browserOrigin:  "http://localhost:5173,http://localhost:5174",
+		},
+		{
+			name:           "non-loopback requested origin",
+			serverAddress:  "http://localhost:3000",
+			redirectOrigin: "http://example.test:5173",
+			browserOrigin:  "http://example.test:5173",
+		},
+		{
+			name:           "localhost suffix attack",
+			serverAddress:  "http://localhost:3000",
+			redirectOrigin: "http://localhost.evil.test:5173",
+			browserOrigin:  "http://localhost.evil.test:5173",
+		},
+		{
+			name:           "non-loopback canonical origin",
+			serverAddress:  "https://newapi.withcortex.ai",
+			redirectOrigin: "http://localhost:5173",
+			browserOrigin:  "http://localhost:5173",
+		},
+		{
+			name:           "secure cookie mode",
+			serverAddress:  "http://localhost:3000",
+			secure:         true,
+			redirectOrigin: "http://localhost:5173",
+			browserOrigin:  "http://localhost:5173",
+		},
+		{
+			name:           "https development callback",
+			serverAddress:  "http://localhost:3000",
+			redirectOrigin: "https://localhost:5173",
+			browserOrigin:  "https://localhost:5173",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			system_setting.ServerAddress = test.serverAddress
+			common.SessionCookieSecure = test.secure
+			common.SessionCookieTrustedURLs = nil
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			body := fmt.Sprintf(`{"provider":"auth-flow-test","intent":"login","redirect_origin":%q}`, test.redirectOrigin)
+			c.Request = httptest.NewRequest(http.MethodPost, "/api/oauth/state", strings.NewReader(body))
+			c.Request.Header.Set("Content-Type", "application/json")
+			if test.browserOrigin != "" {
+				c.Request.Header.Set("Origin", test.browserOrigin)
+			}
+
+			GenerateOAuthCode(c)
+
+			assert.Equal(t, http.StatusBadRequest, recorder.Code)
+		})
+	}
 }
 
 func TestGenerateOAuthCodeBindsFlowToAuthenticatedSession(t *testing.T) {
@@ -162,6 +507,72 @@ func TestOAuthLoginConsumesFlowOnlyAfterProviderIdentity(t *testing.T) {
 	}
 }
 
+func TestOAuthExchangeUsesTheStateBoundCallbackURI(t *testing.T) {
+	provider := setupAuthFlowControllerTest(t)
+	previousGitHubProvider := oauth.GetProvider("github")
+	oauth.Register("github", provider)
+	previousAddress := system_setting.ServerAddress
+	previousTrustedURLs := common.SessionCookieTrustedURLs
+	system_setting.ServerAddress = "https://newapi.withcortex.ai"
+	common.SessionCookieTrustedURLs = []string{"https://llmapi.withcortex.ai"}
+	t.Cleanup(func() {
+		oauth.Register("github", previousGitHubProvider)
+		system_setting.ServerAddress = previousAddress
+		common.SessionCookieTrustedURLs = previousTrustedURLs
+	})
+	provider.exchangeErr = errors.New("stop after callback capture")
+	flowToken, _, err := model.CreateAuthFlow(model.AuthFlowCreate{
+		Purpose:   model.AuthFlowPurposeOAuth,
+		Provider:  "github",
+		Intent:    model.AuthFlowIntentLogin,
+		Payload:   `{"redirect_uri":"https://llmapi.withcortex.ai/oauth/github"}`,
+		ExpiresAt: time.Now().Add(time.Minute),
+	})
+	require.NoError(t, err)
+
+	router := gin.New()
+	router.GET("/api/oauth/:provider", HandleOAuth)
+	request := httptest.NewRequest(http.MethodGet, "/api/oauth/github?state="+flowToken+"&code=test", nil)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+
+	assert.Equal(t, 1, provider.exchangeCalls)
+	assert.Equal(t, "https://llmapi.withcortex.ai/oauth/github", provider.exchangedRedirectURI)
+}
+
+func TestOAuthExchangeUsesTheStateBoundInsecureLoopbackCallbackURI(t *testing.T) {
+	provider := setupAuthFlowControllerTest(t)
+	previousAddress := system_setting.ServerAddress
+	previousSecure := common.SessionCookieSecure
+	previousTrustedURLs := common.SessionCookieTrustedURLs
+	system_setting.ServerAddress = "http://localhost:3000"
+	common.SessionCookieSecure = false
+	common.SessionCookieTrustedURLs = nil
+	t.Cleanup(func() {
+		system_setting.ServerAddress = previousAddress
+		common.SessionCookieSecure = previousSecure
+		common.SessionCookieTrustedURLs = previousTrustedURLs
+	})
+	provider.exchangeErr = errors.New("stop after callback capture")
+	flowToken, _, err := model.CreateAuthFlow(model.AuthFlowCreate{
+		Purpose:   model.AuthFlowPurposeOAuth,
+		Provider:  "auth-flow-test",
+		Intent:    model.AuthFlowIntentLogin,
+		Payload:   `{"redirect_uri":"http://localhost:5173/oauth/auth-flow-test"}`,
+		ExpiresAt: time.Now().Add(time.Minute),
+	})
+	require.NoError(t, err)
+
+	router := gin.New()
+	router.GET("/api/oauth/:provider", HandleOAuth)
+	request := httptest.NewRequest(http.MethodGet, "/api/oauth/auth-flow-test?state="+flowToken+"&code=test", nil)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+
+	assert.Equal(t, 1, provider.exchangeCalls)
+	assert.Equal(t, "http://localhost:5173/oauth/auth-flow-test", provider.exchangedRedirectURI)
+}
+
 func TestOAuthLoginConsumesFlowAfterProviderIdentityAndOnProviderError(t *testing.T) {
 	provider := setupAuthFlowControllerTest(t)
 
@@ -169,7 +580,7 @@ func TestOAuthLoginConsumesFlowAfterProviderIdentityAndOnProviderError(t *testin
 	provider.userInfoErr = nil
 	successToken, _, err := model.CreateAuthFlow(model.AuthFlowCreate{
 		Purpose: model.AuthFlowPurposeOAuth, Provider: "auth-flow-test", Intent: model.AuthFlowIntentLogin,
-		Payload: `{invalid`, ExpiresAt: time.Now().Add(time.Minute),
+		Payload: `{}`, ExpiresAt: time.Now().Add(time.Minute),
 	})
 	require.NoError(t, err)
 	router := gin.New()

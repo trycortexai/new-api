@@ -18,8 +18,6 @@ import (
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/setting/system_setting"
-	"github.com/gin-gonic/gin"
 	"github.com/samber/lo"
 	"github.com/tidwall/gjson"
 )
@@ -87,18 +85,17 @@ func (p *GenericOAuthProvider) GetConfig() *model.CustomOAuthProvider {
 	return p.config
 }
 
-func (p *GenericOAuthProvider) ExchangeToken(ctx context.Context, code string, c *gin.Context) (*OAuthToken, error) {
+func (p *GenericOAuthProvider) ExchangeToken(ctx context.Context, code, redirectURI string) (*OAuthToken, error) {
 	if code == "" {
 		return nil, NewOAuthError(i18n.MsgOAuthInvalidCode, nil)
 	}
 
 	logger.LogDebug(ctx, "[OAuth-Generic-%s] ExchangeToken: code=%s...", p.config.Slug, code[:min(len(code), 10)])
 
-	redirectUri := fmt.Sprintf("%s/oauth/%s", system_setting.ServerAddress, p.config.Slug)
 	values := url.Values{}
 	values.Set("grant_type", "authorization_code")
 	values.Set("code", code)
-	values.Set("redirect_uri", redirectUri)
+	values.Set("redirect_uri", redirectURI)
 
 	// Determine auth style
 	authStyle := p.config.AuthStyle
@@ -129,7 +126,7 @@ func (p *GenericOAuthProvider) ExchangeToken(ctx context.Context, code string, c
 	}
 
 	logger.LogDebug(ctx, "[OAuth-Generic-%s] ExchangeToken: token_endpoint=%s, redirect_uri=%s, auth_style=%d",
-		p.config.Slug, p.config.TokenEndpoint, redirectUri, authStyle)
+		p.config.Slug, p.config.TokenEndpoint, redirectURI, authStyle)
 
 	client := http.Client{
 		Timeout: 20 * time.Second,

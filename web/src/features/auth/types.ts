@@ -96,6 +96,11 @@ export interface SystemStatus {
     version?: string
     system_name?: string
     logo?: string
+    server_address?: string
+    oauth_canonical_origin?: string
+    session_cookie_secure?: boolean
+    oauth_trusted_alias_providers?: string[]
+    oauth_trusted_origins?: string[]
     github_oauth?: boolean
     github_client_id?: string
     discord_oauth?: boolean
@@ -141,6 +146,11 @@ export interface SystemStatus {
   version?: string
   system_name?: string
   logo?: string
+  server_address?: string
+  oauth_canonical_origin?: string
+  session_cookie_secure?: boolean
+  oauth_trusted_alias_providers?: string[]
+  oauth_trusted_origins?: string[]
   github_oauth?: boolean
   github_client_id?: string
   discord_oauth?: boolean

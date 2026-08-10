@@ -3,7 +3,9 @@ package controller
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -13,20 +15,161 @@ import (
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/oauth"
+	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
 const oauthAuthFlowTTL = 10 * time.Minute
 
+var oauthTrustedAliasProviders = []string{"github", "discord", "oidc"}
+
+func oauthConfiguredTrustedOrigins() []string {
+	canonicalOrigin, _ := common.NormalizeOrigin(system_setting.ServerAddress)
+	seen := map[string]struct{}{}
+	origins := make([]string, 0, len(common.SessionCookieTrustedURLs))
+	for _, rawOrigin := range common.SessionCookieTrustedURLs {
+		origin, err := common.NormalizeOrigin(rawOrigin)
+		if err != nil || origin == canonicalOrigin {
+			continue
+		}
+		if _, exists := seen[origin]; exists {
+			continue
+		}
+		seen[origin] = struct{}{}
+		origins = append(origins, origin)
+	}
+	return origins
+}
+
 type oauthStateRequest struct {
-	Provider string `json:"provider"`
-	Intent   string `json:"intent"`
-	Aff      string `json:"aff,omitempty"`
+	Provider       string `json:"provider"`
+	Intent         string `json:"intent"`
+	Aff            string `json:"aff,omitempty"`
+	RedirectOrigin string `json:"redirect_origin,omitempty"`
 }
 
 type oauthFlowPayload struct {
 	AffiliateCode string `json:"affiliate_code,omitempty"`
+	RedirectURI   string `json:"redirect_uri"`
+}
+
+func isConfiguredOAuthOrigin(origin string) bool {
+	canonicalOrigin, err := common.NormalizeOrigin(system_setting.ServerAddress)
+	if err == nil && origin == canonicalOrigin {
+		return true
+	}
+	for _, trustedOrigin := range common.SessionCookieTrustedURLs {
+		normalizedTrustedOrigin, err := common.NormalizeOrigin(trustedOrigin)
+		if err == nil && origin == normalizedTrustedOrigin {
+			return true
+		}
+	}
+	return false
+}
+
+func isHTTPLoopbackOrigin(origin string) bool {
+	parsedOrigin, err := url.Parse(origin)
+	if err != nil || parsedOrigin.Scheme != "http" {
+		return false
+	}
+	hostname := strings.ToLower(parsedOrigin.Hostname())
+	if hostname == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(hostname)
+	return ip != nil && ip.IsLoopback()
+}
+
+func isInsecureLocalDevelopmentOAuthOrigin(origin string) bool {
+	// The documented Rsbuild proxy runs on a different loopback port from the
+	// backend. Keep that callback same-origin with the dev UI so login storage
+	// and the binding popup handshake continue to work. This exception cannot
+	// activate for an HTTPS or non-loopback deployment.
+	if common.SessionCookieSecure || !isHTTPLoopbackOrigin(origin) {
+		return false
+	}
+	canonicalOrigin, err := common.NormalizeOrigin(system_setting.ServerAddress)
+	return err == nil && isHTTPLoopbackOrigin(canonicalOrigin)
+}
+
+func isAllowedOAuthOrigin(origin string) bool {
+	return isConfiguredOAuthOrigin(origin) || isInsecureLocalDevelopmentOAuthOrigin(origin)
+}
+
+func oauthProviderSupportsTrustedAlias(provider string) bool {
+	if oauth.IsCustomProvider(provider) {
+		return false
+	}
+	for _, aliasProvider := range oauthTrustedAliasProviders {
+		if provider == aliasProvider {
+			return true
+		}
+	}
+	return false
+}
+
+func isOAuthProviderAllowedAtOrigin(provider, origin string) bool {
+	canonicalOrigin, err := common.NormalizeOrigin(system_setting.ServerAddress)
+	if err == nil && origin == canonicalOrigin {
+		return true
+	}
+	if isInsecureLocalDevelopmentOAuthOrigin(origin) {
+		return true
+	}
+	return oauthProviderSupportsTrustedAlias(provider)
+}
+
+func isAllowedOAuthStartOrigin(requestedOrigin string, request *http.Request) bool {
+	origin, err := common.NormalizeOrigin(requestedOrigin)
+	if err != nil {
+		return false
+	}
+	if isConfiguredOAuthOrigin(origin) {
+		return true
+	}
+	if !isInsecureLocalDevelopmentOAuthOrigin(origin) {
+		return false
+	}
+	// SESSION_COOKIE_TRUSTED_URL intentionally cannot be configured in insecure
+	// mode. Bind the one local exception to the browser's exact Origin instead
+	// of accepting an arbitrary loopback port supplied only in JSON.
+	originValues := request.Header.Values("Origin")
+	if len(originValues) != 1 || strings.Contains(originValues[0], ",") {
+		return false
+	}
+	normalizedBrowserOrigin, err := common.NormalizeOrigin(originValues[0])
+	return err == nil && normalizedBrowserOrigin == origin
+}
+
+func validateOAuthCallbackURI(provider, callbackURI string) (string, error) {
+	if strings.TrimSpace(callbackURI) == "" {
+		return resolveOAuthCallbackURI(provider, "")
+	}
+	parsedCallback, err := url.Parse(callbackURI)
+	if err != nil || parsedCallback.User != nil || parsedCallback.RawQuery != "" || parsedCallback.Fragment != "" {
+		return "", errors.New("OAuth callback URI is invalid")
+	}
+	expectedPath := "/oauth/" + url.PathEscape(provider)
+	if parsedCallback.Path != expectedPath {
+		return "", errors.New("OAuth callback path is invalid")
+	}
+	origin, err := common.NormalizeOrigin(parsedCallback.Scheme + "://" + parsedCallback.Host)
+	if err != nil || !isAllowedOAuthOrigin(origin) || !isOAuthProviderAllowedAtOrigin(provider, origin) {
+		return "", errors.New("OAuth callback origin is not allowed")
+	}
+	return origin + expectedPath, nil
+}
+
+func resolveOAuthCallbackURI(provider, requestedOrigin string) (string, error) {
+	if requestedOrigin == "" {
+		requestedOrigin = system_setting.ServerAddress
+	}
+	origin, err := common.NormalizeOrigin(requestedOrigin)
+	if err != nil || !isAllowedOAuthOrigin(origin) || !isOAuthProviderAllowedAtOrigin(provider, origin) {
+		return "", errors.New("OAuth redirect origin is not allowed")
+	}
+	return origin + "/oauth/" + url.PathEscape(provider), nil
 }
 
 // providerParams returns map with Provider key for i18n templates
@@ -44,11 +187,27 @@ func GenerateOAuthCode(c *gin.Context) {
 	request.Provider = strings.TrimSpace(request.Provider)
 	request.Intent = strings.TrimSpace(request.Intent)
 	request.Aff = strings.TrimSpace(request.Aff)
+	request.RedirectOrigin = strings.TrimSpace(request.RedirectOrigin)
 	if oauth.GetProvider(request.Provider) == nil ||
 		(request.Intent != model.AuthFlowIntentLogin && request.Intent != model.AuthFlowIntentBind) ||
 		len(request.Aff) > 32 ||
 		(request.Intent == model.AuthFlowIntentBind && request.Aff != "") {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+	if request.RedirectOrigin != "" && !isAllowedOAuthStartOrigin(request.RedirectOrigin, c.Request) {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": i18n.T(c, i18n.MsgInvalidParams),
+		})
+		return
+	}
+	redirectURI, err := resolveOAuthCallbackURI(request.Provider, request.RedirectOrigin)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": i18n.T(c, i18n.MsgInvalidParams),
+		})
 		return
 	}
 	userID := 0
@@ -62,7 +221,10 @@ func GenerateOAuthCode(c *gin.Context) {
 		userID = identity.UserID
 		sessionID = identity.SessionID
 	}
-	payload, err := common.Marshal(oauthFlowPayload{AffiliateCode: request.Aff})
+	payload, err := common.Marshal(oauthFlowPayload{
+		AffiliateCode: request.Aff,
+		RedirectURI:   redirectURI,
+	})
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -85,8 +247,9 @@ func GenerateOAuthCode(c *gin.Context) {
 		"success": true,
 		"message": "",
 		"data": gin.H{
-			"flow_token": state,
-			"expires_at": expiresAt.Unix(),
+			"flow_token":   state,
+			"expires_at":   expiresAt.Unix(),
+			"redirect_uri": redirectURI,
 		},
 	})
 }
@@ -109,6 +272,19 @@ func HandleOAuth(c *gin.Context) {
 		Purpose:  model.AuthFlowPurposeOAuth,
 		Provider: providerName,
 	})
+	if err != nil {
+		c.JSON(http.StatusForbidden, gin.H{
+			"success": false,
+			"message": i18n.T(c, i18n.MsgOAuthStateInvalid),
+		})
+		return
+	}
+	var payload oauthFlowPayload
+	if err := common.UnmarshalJsonStr(pendingFlow.Payload, &payload); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	payload.RedirectURI, err = validateOAuthCallbackURI(providerName, payload.RedirectURI)
 	if err != nil {
 		c.JSON(http.StatusForbidden, gin.H{
 			"success": false,
@@ -163,13 +339,13 @@ func HandleOAuth(c *gin.Context) {
 		return
 	}
 	if pendingFlow.Intent == model.AuthFlowIntentBind {
-		handleOAuthBind(c, provider, pendingFlow, state)
+		handleOAuthBind(c, provider, pendingFlow, state, payload.RedirectURI)
 		return
 	}
 
 	// 5. Exchange code for token
 	code := c.Query("code")
-	token, err := provider.ExchangeToken(c.Request.Context(), code, c)
+	token, err := provider.ExchangeToken(c.Request.Context(), code, payload.RedirectURI)
 	if err != nil {
 		handleOAuthError(c, err)
 		return
@@ -181,18 +357,13 @@ func HandleOAuth(c *gin.Context) {
 		handleOAuthError(c, err)
 		return
 	}
-	flow, err := model.ConsumeAuthFlow(state, consumeMatch)
+	_, err = model.ConsumeAuthFlow(state, consumeMatch)
 	if err != nil {
 		c.JSON(http.StatusForbidden, gin.H{"success": false, "message": i18n.T(c, i18n.MsgOAuthStateInvalid)})
 		return
 	}
 
 	// 7. Find or create user
-	var payload oauthFlowPayload
-	if err := common.UnmarshalJsonStr(flow.Payload, &payload); err != nil {
-		common.ApiError(c, err)
-		return
-	}
 	user, err := findOrCreateOAuthUser(c, provider, oauthUser, payload.AffiliateCode)
 	if err != nil {
 		if errors.Is(err, model.ErrEmailAlreadyTaken) {
@@ -223,10 +394,10 @@ func HandleOAuth(c *gin.Context) {
 }
 
 // handleOAuthBind handles binding OAuth account to existing user
-func handleOAuthBind(c *gin.Context, provider oauth.Provider, pendingFlow *model.AuthFlow, flowToken string) {
+func handleOAuthBind(c *gin.Context, provider oauth.Provider, pendingFlow *model.AuthFlow, flowToken, redirectURI string) {
 	// Exchange code for token
 	code := c.Query("code")
-	token, err := provider.ExchangeToken(c.Request.Context(), code, c)
+	token, err := provider.ExchangeToken(c.Request.Context(), code, redirectURI)
 	if err != nil {
 		handleOAuthError(c, err)
 		return

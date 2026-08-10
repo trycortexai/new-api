@@ -33,6 +33,7 @@ export {
   wechatLoginByCode,
   telegramLogin,
 } from './api'
+export type { OAuthFlow } from './api'
 
 // ============================================================================
 // Types
@@ -81,11 +82,16 @@ export {
   buildDiscordOAuthUrl,
   buildOIDCOAuthUrl,
   buildLinuxDOOAuthUrl,
+  buildCustomOAuthUrl,
   getAvailableOAuthProviders,
   hasOAuthProviders,
 } from './lib/oauth'
 
-export { getAffiliateCode, saveAffiliateCode } from './lib/storage'
+export {
+  captureAffiliateCodeFromSearch,
+  getAffiliateCode,
+  saveAffiliateCode,
+} from './lib/storage'
 
 export {
   isValidOTP,

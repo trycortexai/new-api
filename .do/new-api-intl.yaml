@@ -4,6 +4,8 @@ region: nyc
 domains:
   - domain: newapi.withcortex.ai
     type: PRIMARY
+  - domain: llmapi.withcortex.ai
+    type: ALIAS
 
 alerts:
   - rule: DEPLOYMENT_FAILED
@@ -48,7 +50,7 @@ services:
         scope: RUN_TIME
         type: GENERAL
       - key: SESSION_COOKIE_TRUSTED_URL
-        value: https://newapi.withcortex.ai,https://newapicn.withcortex.ai
+        value: https://newapi.withcortex.ai,https://llmapi.withcortex.ai,https://newapicn.withcortex.ai
         scope: RUN_TIME
         type: GENERAL
       - key: TZ

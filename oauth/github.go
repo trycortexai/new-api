@@ -14,7 +14,6 @@ import (
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/gin-gonic/gin"
 )
 
 func init() {
@@ -45,7 +44,7 @@ func (p *GitHubProvider) IsEnabled() bool {
 	return common.GitHubOAuthEnabled
 }
 
-func (p *GitHubProvider) ExchangeToken(ctx context.Context, code string, c *gin.Context) (*OAuthToken, error) {
+func (p *GitHubProvider) ExchangeToken(ctx context.Context, code, redirectURI string) (*OAuthToken, error) {
 	if code == "" {
 		return nil, NewOAuthError(i18n.MsgOAuthInvalidCode, nil)
 	}
@@ -56,6 +55,7 @@ func (p *GitHubProvider) ExchangeToken(ctx context.Context, code string, c *gin.
 		"client_id":     common.GitHubClientId,
 		"client_secret": common.GitHubClientSecret,
 		"code":          code,
+		"redirect_uri":  redirectURI,
 	}
 	jsonData, err := json.Marshal(values)
 	if err != nil {

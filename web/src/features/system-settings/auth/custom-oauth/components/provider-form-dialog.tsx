@@ -232,6 +232,11 @@ export function ProviderFormDialog(props: ProviderFormDialogProps) {
                   'This callback URL updates from the slug field and is the value to register with your provider.'
                 )}
               </p>
+              <p>
+                {t(
+                  'Custom OAuth providers use the displayed canonical callback only and are not offered on trusted aliases.'
+                )}
+              </p>
               <div className='flex min-w-0 flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between'>
                 <span className='text-muted-foreground shrink-0'>
                   {t('Authorization callback URL')}
