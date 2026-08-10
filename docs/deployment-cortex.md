@@ -3,10 +3,11 @@
 This deployment mirrors the existing Cortex API/Edge split without replacing
 `api.withcortex.ai` or `apicn.withcortex.ai`.
 
-| Site | Public hostname | Runtime | Database and cache |
-| --- | --- | --- | --- |
-| International | `newapi.withcortex.ai` | DigitalOcean App Platform, NYC | `new_api` database on `cortex-prod` PostgreSQL 16 and the existing `redis-prod` Redis 7 cluster |
-| Hong Kong route | `newapicn.withcortex.ai` | Existing Hong Kong server, Caddy reverse proxy | Uses the international site's PostgreSQL and Redis through `newapi.withcortex.ai` |
+| Site                | Public hostname          | Runtime                                         | Database and cache                                                                              |
+| ------------------- | ------------------------ | ----------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| International       | `newapi.withcortex.ai`   | DigitalOcean App Platform, NYC                  | `new_api` database on `cortex-prod` PostgreSQL 16 and the existing `redis-prod` Redis 7 cluster |
+| International alias | `llmapi.withcortex.ai`   | Alias of the same DigitalOcean App Platform app | Uses the same international PostgreSQL and Redis data plane                                     |
+| Hong Kong route     | `newapicn.withcortex.ai` | Existing Hong Kong server, Caddy reverse proxy  | Uses the international site's PostgreSQL and Redis through `newapi.withcortex.ai`               |
 
 There is one application deployment and one authoritative data plane. The Hong
 Kong endpoint is a stateless acceleration route to the international endpoint;
@@ -88,6 +89,12 @@ The required New API and QuantumNous attribution remains in the site footer.
 Docs and About are disabled in `HeaderNavModules`; the Cortex product and
 documentation destination is `https://withcortex.ai/`.
 
+The canonical `newapi.withcortex.ai` hostname keeps this homepage. The
+`llmapi.withcortex.ai` alias does not render a homepage at `/`: after the
+existing authentication bootstrap completes, authenticated visitors are
+redirected to `/dashboard/overview` and unauthenticated visitors are redirected
+to `/sign-in`.
+
 The logo URL uses the canonical `newapi.withcortex.ai` hostname. While DNS is
 pending, production may temporarily use the DigitalOcean ingress hostname for
 the same `/cortex-logo.svg` asset.
@@ -96,6 +103,7 @@ Run the same checks against both public hostnames:
 
 ```bash
 curl -fsS https://newapi.withcortex.ai/api/status
+curl -fsS https://llmapi.withcortex.ai/api/status
 curl -fsS https://newapicn.withcortex.ai/api/status
 ```
 
@@ -107,6 +115,14 @@ token through both routes:
 ```bash
 curl -fsS https://newapi.withcortex.ai/v1/models \
   -H "Authorization: Bearer <international-test-token>"
+
+curl -fsS https://llmapi.withcortex.ai/v1/models \
+  -H "Authorization: Bearer <international-test-token>"
+
+curl -fsS https://llmapi.withcortex.ai/v1/chat/completions \
+  -H "Authorization: Bearer <international-test-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"<low-cost-model>","messages":[{"role":"user","content":"Reply with exactly OK"}],"stream":false,"max_tokens":1}'
 
 curl -fsS https://newapicn.withcortex.ai/v1/models \
   -H "Authorization: Bearer <hong-kong-test-token>"
