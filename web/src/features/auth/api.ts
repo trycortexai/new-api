@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import axios from 'axios'
 
 import { api, refreshAuthentication, type RefreshOutcome } from '@/lib/api'
+import { buildGitHubOAuthUrl } from '@/lib/oauth'
 import { useAuthStore } from '@/stores/auth-store'
 
 import { getAffiliateCode } from './lib/storage'
@@ -131,9 +132,64 @@ export async function sendPasswordResetEmail(
 // OAuth
 // ----------------------------------------------------------------------------
 
+export interface OAuthFlow {
+  state: string
+  redirectUri: string
+}
+
+interface OAuthFlowRequestOptions {
+  skipAuthRefresh: boolean
+}
+
+interface OAuthFlowRuntime {
+  getAffiliateCode: () => string
+  getRedirectOrigin: () => string
+  request: (
+    payload: {
+      provider: string
+      intent: 'login' | 'bind'
+      aff?: string
+      redirect_origin: string
+    },
+    options: OAuthFlowRequestOptions
+  ) => Promise<
+    ApiResponse<{
+      flow_token?: string
+      redirect_uri?: string
+    }>
+  >
+}
+
+export async function executeCreateOAuthFlow(
+  runtime: OAuthFlowRuntime,
+  provider: string,
+  intent: 'login' | 'bind'
+): Promise<OAuthFlow> {
+  const aff = intent === 'login' ? runtime.getAffiliateCode() : ''
+  const response = await runtime.request(
+    {
+      provider,
+      intent,
+      aff: aff || undefined,
+      redirect_origin: runtime.getRedirectOrigin(),
+    },
+    { skipAuthRefresh: intent === 'login' }
+  )
+  const state = response.data?.flow_token
+  const redirectUri = response.data?.redirect_uri
+  if (response.success && state && redirectUri) {
+    return { state, redirectUri }
+  }
+  throw new Error(response.message || 'Failed to initialize OAuth')
+}
+
 // Start GitHub OAuth flow
-export async function githubOAuthStart(clientId: string, state: string) {
-  const url = `https://github.com/login/oauth/authorize?client_id=${clientId}&state=${state}&scope=user:email`
+export async function githubOAuthStart(
+  clientId: string,
+  state: string,
+  redirectURI: string
+) {
+  const url = buildGitHubOAuthUrl(clientId, state, redirectURI)
   window.open(url)
 }
 
@@ -141,20 +197,19 @@ export async function githubOAuthStart(clientId: string, state: string) {
 export async function createOAuthFlow(
   provider: string,
   intent: 'login' | 'bind'
-): Promise<string> {
-  const aff = intent === 'login' ? getAffiliateCode() : ''
-  const res = await api.post(
-    '/api/oauth/state',
-    { provider, intent, aff: aff || undefined },
-    { skipAuthRefresh: intent === 'login' }
+): Promise<OAuthFlow> {
+  return executeCreateOAuthFlow(
+    {
+      getAffiliateCode,
+      getRedirectOrigin: () => window.location.origin,
+      request: async (payload, options) => {
+        const res = await api.post('/api/oauth/state', payload, options)
+        return res.data
+      },
+    },
+    provider,
+    intent
   )
-  if (res.data?.success) {
-    if (typeof res.data.data === 'string') return res.data.data
-    if (typeof res.data.data?.flow_token === 'string') {
-      return res.data.data.flow_token
-    }
-  }
-  throw new Error(res.data?.message || 'Failed to initialize OAuth')
 }
 
 // WeChat login by authorization code

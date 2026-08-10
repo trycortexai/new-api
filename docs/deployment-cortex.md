@@ -95,6 +95,11 @@ existing authentication bootstrap completes, authenticated visitors are
 redirected to `/dashboard/overview` and unauthenticated visitors are redirected
 to `/sign-in`.
 
+Each enabled OAuth client or provider must register the exact alias callback
+`https://llmapi.withcortex.ai/oauth/<provider>` in addition to its canonical
+callback. Authorization and token exchange use the initiating origin bound to
+the one-time OAuth state.
+
 The logo URL uses the canonical `newapi.withcortex.ai` hostname. While DNS is
 pending, production may temporarily use the DigitalOcean ingress hostname for
 the same `/cortex-logo.svg` asset.

@@ -28,6 +28,7 @@ import {
   buildDiscordOAuthUrl,
   buildOIDCOAuthUrl,
   buildLinuxDOOAuthUrl,
+  buildCustomOAuthUrl,
 } from '../lib/oauth'
 import { pickTelegramAuthorization } from '../lib/telegram-login'
 import type { SystemStatus, CustomOAuthProviderInfo } from '../types'
@@ -89,9 +90,13 @@ export function useOAuthLogin(
 
     try {
       await resetSession()
-      const state = await createOAuthFlow('github', 'login')
+      const flow = await createOAuthFlow('github', 'login')
 
-      const url = buildGitHubOAuthUrl(status.github_client_id, state)
+      const url = buildGitHubOAuthUrl(
+        status.github_client_id,
+        flow.state,
+        flow.redirectUri
+      )
       window.open(url, '_self')
     } catch {
       toast.error(t('Failed to start GitHub login'))
@@ -110,9 +115,13 @@ export function useOAuthLogin(
     setIsLoading(true)
     try {
       await resetSession()
-      const state = await createOAuthFlow('discord', 'login')
+      const flow = await createOAuthFlow('discord', 'login')
 
-      const url = buildDiscordOAuthUrl(status.discord_client_id, state)
+      const url = buildDiscordOAuthUrl(
+        status.discord_client_id,
+        flow.state,
+        flow.redirectUri
+      )
       window.open(url, '_self')
     } catch {
       toast.error(t('Failed to start Discord login'))
@@ -127,12 +136,13 @@ export function useOAuthLogin(
     setIsLoading(true)
     try {
       await resetSession()
-      const state = await createOAuthFlow('oidc', 'login')
+      const flow = await createOAuthFlow('oidc', 'login')
 
       const url = buildOIDCOAuthUrl(
         status.oidc_authorization_endpoint,
         status.oidc_client_id,
-        state
+        flow.state,
+        flow.redirectUri
       )
       window.open(url, '_self')
     } catch {
@@ -148,9 +158,13 @@ export function useOAuthLogin(
     setIsLoading(true)
     try {
       await resetSession()
-      const state = await createOAuthFlow('linuxdo', 'login')
+      const flow = await createOAuthFlow('linuxdo', 'login')
 
-      const url = buildLinuxDOOAuthUrl(status.linuxdo_client_id, state)
+      const url = buildLinuxDOOAuthUrl(
+        status.linuxdo_client_id,
+        flow.state,
+        flow.redirectUri
+      )
       window.open(url, '_self')
     } catch {
       toast.error(t('Failed to start LinuxDO login'))
@@ -209,19 +223,16 @@ export function useOAuthLogin(
     setIsLoading(true)
     try {
       await resetSession()
-      const state = await createOAuthFlow(provider.slug, 'login')
+      const flow = await createOAuthFlow(provider.slug, 'login')
+      const url = buildCustomOAuthUrl(
+        provider.authorization_endpoint,
+        provider.client_id,
+        flow.state,
+        flow.redirectUri,
+        provider.scopes
+      )
 
-      const redirectUri = `${window.location.origin}/oauth/${provider.slug}`
-      const url = new URL(provider.authorization_endpoint)
-      url.searchParams.set('client_id', provider.client_id)
-      url.searchParams.set('redirect_uri', redirectUri)
-      url.searchParams.set('response_type', 'code')
-      url.searchParams.set('state', state)
-      if (provider.scopes) {
-        url.searchParams.set('scope', provider.scopes)
-      }
-
-      window.open(url.toString(), '_self')
+      window.open(url, '_self')
     } catch {
       toast.error(
         t('Failed to start {{provider}} login', { provider: provider.name })

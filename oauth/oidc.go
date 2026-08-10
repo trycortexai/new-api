@@ -13,7 +13,6 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting/system_setting"
-	"github.com/gin-gonic/gin"
 )
 
 func init() {
@@ -48,7 +47,7 @@ func (p *OIDCProvider) IsEnabled() bool {
 	return system_setting.GetOIDCSettings().Enabled
 }
 
-func (p *OIDCProvider) ExchangeToken(ctx context.Context, code string, c *gin.Context) (*OAuthToken, error) {
+func (p *OIDCProvider) ExchangeToken(ctx context.Context, code, redirectURI string) (*OAuthToken, error) {
 	if code == "" {
 		return nil, NewOAuthError(i18n.MsgOAuthInvalidCode, nil)
 	}
@@ -56,15 +55,14 @@ func (p *OIDCProvider) ExchangeToken(ctx context.Context, code string, c *gin.Co
 	logger.LogDebug(ctx, "[OAuth-OIDC] ExchangeToken: code=%s...", code[:min(len(code), 10)])
 
 	settings := system_setting.GetOIDCSettings()
-	redirectUri := fmt.Sprintf("%s/oauth/oidc", system_setting.ServerAddress)
 	values := url.Values{}
 	values.Set("client_id", settings.ClientId)
 	values.Set("client_secret", settings.ClientSecret)
 	values.Set("code", code)
 	values.Set("grant_type", "authorization_code")
-	values.Set("redirect_uri", redirectUri)
+	values.Set("redirect_uri", redirectURI)
 
-	logger.LogDebug(ctx, "[OAuth-OIDC] ExchangeToken: token_endpoint=%s, redirect_uri=%s", settings.TokenEndpoint, redirectUri)
+	logger.LogDebug(ctx, "[OAuth-OIDC] ExchangeToken: token_endpoint=%s, redirect_uri=%s", settings.TokenEndpoint, redirectURI)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", settings.TokenEndpoint, strings.NewReader(values.Encode()))
 	if err != nil {

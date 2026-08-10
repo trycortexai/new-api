@@ -15,7 +15,6 @@ import (
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/gin-gonic/gin"
 )
 
 func init() {
@@ -42,7 +41,7 @@ func (p *LinuxDOProvider) IsEnabled() bool {
 	return common.LinuxDOOAuthEnabled
 }
 
-func (p *LinuxDOProvider) ExchangeToken(ctx context.Context, code string, c *gin.Context) (*OAuthToken, error) {
+func (p *LinuxDOProvider) ExchangeToken(ctx context.Context, code, redirectURI string) (*OAuthToken, error) {
 	if code == "" {
 		return nil, NewOAuthError(i18n.MsgOAuthInvalidCode, nil)
 	}
@@ -53,13 +52,6 @@ func (p *LinuxDOProvider) ExchangeToken(ctx context.Context, code string, c *gin
 	tokenEndpoint := common.GetEnvOrDefaultString("LINUX_DO_TOKEN_ENDPOINT", "https://connect.linux.do/oauth2/token")
 	credentials := common.LinuxDOClientId + ":" + common.LinuxDOClientSecret
 	basicAuth := "Basic " + base64.StdEncoding.EncodeToString([]byte(credentials))
-
-	// Get redirect URI from request
-	scheme := "http"
-	if c.Request.TLS != nil {
-		scheme = "https"
-	}
-	redirectURI := fmt.Sprintf("%s://%s/api/oauth/linuxdo", scheme, c.Request.Host)
 
 	logger.LogDebug(ctx, "[OAuth-LinuxDO] ExchangeToken: token_endpoint=%s, redirect_uri=%s", tokenEndpoint, redirectURI)
 

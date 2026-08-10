@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/QuantumNous/new-api/model"
-	"github.com/gin-gonic/gin"
 )
 
 // Provider defines the interface for OAuth providers
@@ -16,8 +15,8 @@ type Provider interface {
 	IsEnabled() bool
 
 	// ExchangeToken exchanges the authorization code for an access token
-	// The gin.Context is passed for providers that need request info (e.g., for redirect_uri)
-	ExchangeToken(ctx context.Context, code string, c *gin.Context) (*OAuthToken, error)
+	// redirectURI is authorized and bound to the one-time OAuth state by the controller.
+	ExchangeToken(ctx context.Context, code, redirectURI string) (*OAuthToken, error)
 
 	// GetUserInfo retrieves user information using the access token
 	GetUserInfo(ctx context.Context, token *OAuthToken) (*OAuthUser, error)
