@@ -18,13 +18,13 @@ For commercial licensing, please contact support@quantumnous.com
 */
 // @ts-expect-error Bun's test runtime is available in CI but is not part of the
 // production TypeScript project references.
-import { afterAll, afterEach, describe, mock, test } from 'bun:test'
+import { afterAll, afterEach, describe, test } from 'bun:test'
 import assert from 'node:assert/strict'
 
 import { Window } from 'happy-dom'
 
 const domWindow = new Window()
-for (const key of [
+const domGlobalKeys = [
   'window',
   'document',
   'navigator',
@@ -32,40 +32,48 @@ for (const key of [
   'SVGElement',
   'Node',
   'Element',
-] as const) {
+] as const
+const originalDomGlobals = new Map(
+  domGlobalKeys.map((key) => [
+    key,
+    Object.getOwnPropertyDescriptor(globalThis, key),
+  ])
+)
+
+for (const key of domGlobalKeys) {
   Object.defineProperty(globalThis, key, {
     configurable: true,
     value: domWindow[key],
   })
 }
 
-mock.module('@/hooks/use-status', () => ({
-  useStatus: () => ({
-    status: {
-      HeaderNavModules: JSON.stringify({
-        home: true,
-        console: true,
-        pricing: { enabled: false, requireAuth: false },
-        rankings: { enabled: true, requireAuth: false },
-        docs: false,
-        about: false,
-      }),
-    },
-  }),
-}))
-mock.module('react-i18next', () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
-}))
-
 const { act } = await import('react')
 const { createRoot } = await import('react-dom/client')
+const { QueryClient, QueryClientProvider } =
+  await import('@tanstack/react-query')
+const { createInstance } = await import('i18next')
+const { I18nextProvider, initReactI18next } = await import('react-i18next')
 const { ROLE } = await import('@/lib/roles')
 const { useAuthStore } = await import('@/stores/auth-store')
 const { useTopNavLinks } = await import('../use-top-nav-links')
 
+const i18n = createInstance()
+await i18n.use(initReactI18next).init({
+  lng: 'en',
+  resources: {
+    en: {
+      translation: {
+        Console: 'Console',
+        Rankings: 'Rankings',
+      },
+    },
+  },
+})
+
 const reactTestGlobals = globalThis as typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean
 }
+const originalReactActEnvironment = reactTestGlobals.IS_REACT_ACT_ENVIRONMENT
 reactTestGlobals.IS_REACT_ACT_ENVIRONMENT = true
 
 function TopNavLinksHarness() {
@@ -92,9 +100,28 @@ async function renderTopNav(role?: number) {
   const container = document.createElement('div')
   document.body.append(container)
   const root = createRoot(container)
-  await act(async () => root.render(<TopNavLinksHarness />))
+  const queryClient = new QueryClient()
+  queryClient.setQueryData(['status'], {
+    HeaderNavModules: JSON.stringify({
+      home: true,
+      console: true,
+      pricing: { enabled: false, requireAuth: false },
+      rankings: { enabled: true, requireAuth: false },
+      docs: false,
+      about: false,
+    }),
+  })
+  await act(async () =>
+    root.render(
+      <QueryClientProvider client={queryClient}>
+        <I18nextProvider i18n={i18n}>
+          <TopNavLinksHarness />
+        </I18nextProvider>
+      </QueryClientProvider>
+    )
+  )
 
-  return { container, root }
+  return { container, queryClient, root }
 }
 
 describe('top navigation links', () => {
@@ -105,6 +132,18 @@ describe('top navigation links', () => {
 
   afterAll(() => {
     domWindow.close()
+    for (const [key, descriptor] of originalDomGlobals) {
+      if (descriptor) {
+        Object.defineProperty(globalThis, key, descriptor)
+      } else {
+        Reflect.deleteProperty(globalThis, key)
+      }
+    }
+    if (originalReactActEnvironment === undefined) {
+      Reflect.deleteProperty(reactTestGlobals, 'IS_REACT_ACT_ENVIRONMENT')
+    } else {
+      reactTestGlobals.IS_REACT_ACT_ENVIRONMENT = originalReactActEnvironment
+    }
   })
 
   test('shows Console without the duplicate Home link', async () => {
@@ -117,6 +156,7 @@ describe('top navigation links', () => {
     )
 
     await act(async () => rendered.root.unmount())
+    rendered.queryClient.clear()
   })
 
   for (const [name, role] of [
@@ -133,6 +173,7 @@ describe('top navigation links', () => {
       )
 
       await act(async () => rendered.root.unmount())
+      rendered.queryClient.clear()
     })
   }
 
@@ -145,5 +186,6 @@ describe('top navigation links', () => {
     )
 
     await act(async () => rendered.root.unmount())
+    rendered.queryClient.clear()
   })
 })
