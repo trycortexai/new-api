@@ -29,6 +29,20 @@ const STORAGE_KEYS = {
   STATUS: 'status',
 } as const
 
+interface AuthStorage {
+  getItem: (key: string) => string | null
+  setItem: (key: string, value: string) => void
+}
+
+function getBrowserAuthStorage(): AuthStorage | null {
+  if (typeof window === 'undefined') return null
+  try {
+    return window.localStorage
+  } catch {
+    return null
+  }
+}
+
 // ============================================================================
 // Affiliate Code Storage
 // ============================================================================
@@ -36,10 +50,12 @@ const STORAGE_KEYS = {
 /**
  * Get affiliate code from localStorage
  */
-export function getAffiliateCode(): string {
-  if (typeof window === 'undefined') return ''
+export function getAffiliateCode(
+  storage: AuthStorage | null = getBrowserAuthStorage()
+): string {
+  if (!storage) return ''
   try {
-    return window.localStorage.getItem(STORAGE_KEYS.AFFILIATE) ?? ''
+    return storage.getItem(STORAGE_KEYS.AFFILIATE) ?? ''
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error('Failed to get affiliate code:', error)
@@ -50,12 +66,23 @@ export function getAffiliateCode(): string {
 /**
  * Save affiliate code to localStorage
  */
-export function saveAffiliateCode(code: string): void {
-  if (typeof window === 'undefined') return
+export function saveAffiliateCode(
+  code: string,
+  storage: AuthStorage | null = getBrowserAuthStorage()
+): void {
+  if (!storage) return
   try {
-    window.localStorage.setItem(STORAGE_KEYS.AFFILIATE, code)
+    storage.setItem(STORAGE_KEYS.AFFILIATE, code)
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error('Failed to save affiliate code:', error)
   }
+}
+
+export function captureAffiliateCodeFromSearch(
+  search: string,
+  storage: AuthStorage | null = getBrowserAuthStorage()
+): void {
+  const affiliateCode = new URLSearchParams(search).get('aff')?.trim()
+  if (affiliateCode) saveAffiliateCode(affiliateCode, storage)
 }
