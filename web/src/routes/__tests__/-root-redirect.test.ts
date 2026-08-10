@@ -16,24 +16,24 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import assert from 'node:assert/strict'
-import { describe, test } from 'node:test'
+// @ts-expect-error Bun's test runtime is available in CI but is not part of the
+// production TypeScript project references.
+import { describe, expect, test } from 'bun:test'
 
 import { resolveRootRedirect } from '../index'
 
 describe('root route hostname redirects', () => {
   test('redirects a logged-in llmapi visitor to the dashboard overview', () => {
-    assert.equal(
-      resolveRootRedirect('llmapi.withcortex.ai', true),
+    expect(resolveRootRedirect('llmapi.withcortex.ai', true)).toBe(
       '/dashboard/overview'
     )
   })
 
   test('redirects a logged-out llmapi visitor to sign in', () => {
-    assert.equal(resolveRootRedirect('llmapi.withcortex.ai', false), '/sign-in')
+    expect(resolveRootRedirect('llmapi.withcortex.ai', false)).toBe('/sign-in')
   })
 
   test('keeps the homepage for the canonical newapi hostname', () => {
-    assert.equal(resolveRootRedirect('newapi.withcortex.ai', false), null)
+    expect(resolveRootRedirect('newapi.withcortex.ai', false)).toBeNull()
   })
 })
