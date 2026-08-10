@@ -21,6 +21,7 @@ import { useTranslation } from 'react-i18next'
 
 import { useStatus } from '@/hooks/use-status'
 import { parseHeaderNavModulesFromStatus } from '@/lib/nav-modules'
+import { ROLE } from '@/lib/roles'
 import { useAuthStore } from '@/stores/auth-store'
 
 export type TopNavLink = {
@@ -46,7 +47,7 @@ export type TopNavLink = {
 export function useTopNavLinks(): TopNavLink[] {
   const { t } = useTranslation()
   const { status } = useStatus()
-  const { auth } = useAuthStore()
+  const userRole = useAuthStore((state) => state.auth.user?.role)
 
   // Parse HeaderNavModules
   const modules = useMemo(() => {
@@ -58,14 +59,10 @@ export function useTopNavLinks(): TopNavLink[] {
   // Documentation link (may be external)
   const docsLink: string | undefined = status?.docs_link as string | undefined
 
-  const isAuthed = !!auth?.user
+  const isAuthed = userRole !== undefined
+  const isRoot = userRole === ROLE.SUPER_ADMIN
 
   const links: TopNavLink[] = []
-
-  // Home
-  if (modules?.home !== false) {
-    links.push({ title: t('Home'), href: '/' })
-  }
 
   // Console -> /dashboard (new console path)
   if (modules?.console !== false) {
@@ -81,7 +78,7 @@ export function useTopNavLinks(): TopNavLink[] {
 
   // Rankings
   const rankings = modules?.rankings
-  if (rankings && typeof rankings === 'object' && rankings.enabled) {
+  if (isRoot && rankings && typeof rankings === 'object' && rankings.enabled) {
     const requiresAuth = rankings.requireAuth && !isAuthed
     links.push({ title: t('Rankings'), href: '/rankings', requiresAuth })
   }
