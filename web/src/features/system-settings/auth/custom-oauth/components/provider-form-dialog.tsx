@@ -232,6 +232,11 @@ export function ProviderFormDialog(props: ProviderFormDialogProps) {
                   'This callback URL updates from the slug field and is the value to register with your provider.'
                 )}
               </p>
+              <p>
+                {t(
+                  'Register the displayed callback and the same path on every exact origin configured in SESSION_COOKIE_TRUSTED_URL. Each URL must be registered separately.'
+                )}
+              </p>
               <div className='flex min-w-0 flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between'>
                 <span className='text-muted-foreground shrink-0'>
                   {t('Authorization callback URL')}

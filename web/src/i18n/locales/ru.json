@@ -3723,6 +3723,7 @@
     "Regex Replace": "Замена по regex",
     "Register each URL into the matching Test Mode / Production Mode webhook slot in the Pancake dashboard. Separate endpoints prevent test traffic from accidentally crediting production accounts.": "Зарегистрируйте каждый URL в соответствующем слоте вебхука Test Mode / Production Mode в панели Pancake. Раздельные конечные точки предотвращают случайное зачисление тестового трафика на производственные аккаунты.",
     "Register Passkey": "Регистрация Passkey",
+    "Register the displayed callback and the same path on every exact origin configured in SESSION_COOKIE_TRUSTED_URL. Each URL must be registered separately.": "Зарегистрируйте указанный URL обратного вызова и тот же путь для каждого точного источника из SESSION_COOKIE_TRUSTED_URL. Каждый URL необходимо регистрировать отдельно.",
     "Registered a passkey": "Ключ доступа зарегистрирован",
     "Registration Enabled": "Регистрация включена",
     "Registration flow expired. Please try again.": "Процесс регистрации истёк. Повторите попытку.",

@@ -95,10 +95,24 @@ existing authentication bootstrap completes, authenticated visitors are
 redirected to `/dashboard/overview` and unauthenticated visitors are redirected
 to `/sign-in`.
 
-Each enabled OAuth client or provider must register the exact alias callback
-`https://llmapi.withcortex.ai/oauth/<provider>` in addition to its canonical
-callback. Authorization and token exchange use the initiating origin bound to
-the one-time OAuth state.
+OAuth callback validation accepts only the canonical origin and the exact
+origins configured in `SESSION_COOKIE_TRUSTED_URL`. Every enabled provider must
+register its callback separately for all three checked deployment origins;
+registering only the canonical callback is not sufficient:
+
+| Provider     | Exact callbacks to register                                                                                                                                                                        |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GitHub       | `https://newapi.withcortex.ai/oauth/github`<br>`https://llmapi.withcortex.ai/oauth/github`<br>`https://newapicn.withcortex.ai/oauth/github`                                                        |
+| Discord      | `https://newapi.withcortex.ai/oauth/discord`<br>`https://llmapi.withcortex.ai/oauth/discord`<br>`https://newapicn.withcortex.ai/oauth/discord`                                                     |
+| OIDC         | `https://newapi.withcortex.ai/oauth/oidc`<br>`https://llmapi.withcortex.ai/oauth/oidc`<br>`https://newapicn.withcortex.ai/oauth/oidc`                                                              |
+| LinuxDO      | `https://newapi.withcortex.ai/oauth/linuxdo`<br>`https://llmapi.withcortex.ai/oauth/linuxdo`<br>`https://newapicn.withcortex.ai/oauth/linuxdo`                                                     |
+| Custom OAuth | `https://newapi.withcortex.ai/oauth/<slug>`<br>`https://llmapi.withcortex.ai/oauth/<slug>`<br>`https://newapicn.withcortex.ai/oauth/<slug>` (replace `<slug>` with the provider's configured slug) |
+
+Keep the three origins in `.do/new-api-intl.yaml`'s
+`SESSION_COOKIE_TRUSTED_URL` value synchronized with provider registrations.
+Authorization and token exchange use the initiating origin bound to the
+one-time OAuth state; exact-origin validation must not be replaced with
+wildcards.
 
 The logo URL uses the canonical `newapi.withcortex.ai` hostname. While DNS is
 pending, production may temporarily use the DigitalOcean ingress hostname for

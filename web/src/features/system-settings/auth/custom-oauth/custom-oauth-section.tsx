@@ -82,6 +82,11 @@ export function CustomOAuthSection(props: CustomOAuthSectionProps) {
               'Use this callback URL pattern when registering a custom OAuth provider.'
             )}
           </p>
+          <p>
+            {t(
+              'Register the displayed callback and the same path on every exact origin configured in SESSION_COOKIE_TRUSTED_URL. Each URL must be registered separately.'
+            )}
+          </p>
           <div className='flex min-w-0 flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between'>
             <span className='text-muted-foreground shrink-0'>
               {t('OAuth callback URL')}

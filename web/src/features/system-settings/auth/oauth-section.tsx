@@ -140,11 +140,18 @@ type OAuthSetupGuideProps = {
 }
 
 function OAuthSetupGuide(props: OAuthSetupGuideProps) {
+  const { t } = useTranslation()
+
   return (
     <Alert className='lg:col-span-2'>
       <AlertTitle>{props.title}</AlertTitle>
       <AlertDescription className='space-y-3 text-sm'>
         <div>{props.description}</div>
+        <p>
+          {t(
+            'Register the displayed callback and the same path on every exact origin configured in SESSION_COOKIE_TRUSTED_URL. Each URL must be registered separately.'
+          )}
+        </p>
         <div className='space-y-2'>
           {props.rows.map((row) => (
             <div

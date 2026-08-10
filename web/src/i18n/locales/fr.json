@@ -3723,6 +3723,7 @@
     "Regex Replace": "Remplacement regex",
     "Register each URL into the matching Test Mode / Production Mode webhook slot in the Pancake dashboard. Separate endpoints prevent test traffic from accidentally crediting production accounts.": "Enregistrez chaque URL dans l’emplacement webhook correspondant au mode test ou production dans le tableau de bord Pancake. Des points de terminaison séparés évitent que le trafic de test crédite accidentellement les comptes de production.",
     "Register Passkey": "Enregistrer un Passkey",
+    "Register the displayed callback and the same path on every exact origin configured in SESSION_COOKIE_TRUSTED_URL. Each URL must be registered separately.": "Enregistrez le callback affiché ainsi que le même chemin pour chaque origine exacte configurée dans SESSION_COOKIE_TRUSTED_URL. Chaque URL doit être enregistrée séparément.",
     "Registered a passkey": "Passkey enregistré",
     "Registration Enabled": "Inscription activée",
     "Registration flow expired. Please try again.": "Le processus d’inscription a expiré. Veuillez réessayer.",
