@@ -46,6 +46,7 @@ import { OAuthProviders } from '@/features/auth/components/oauth-providers'
 import { loginFormSchema } from '@/features/auth/constants'
 import { useAuthRedirect } from '@/features/auth/hooks/use-auth-redirect'
 import { useTurnstile } from '@/features/auth/hooks/use-turnstile'
+import { isOAuthProviderAvailableAtOrigin } from '@/features/auth/lib/oauth-callback-policy'
 import { beginPasskeyLogin, finishPasskeyLogin } from '@/features/auth/passkey'
 import type { AuthFormProps } from '@/features/auth/types'
 import { useStatus } from '@/hooks/use-status'
@@ -103,13 +104,20 @@ export function UserAuthForm({
     !passkeySupported ||
     (requiresLegalConsent && !agreedToLegal)
   const hasWeChatLogin = Boolean(status?.wechat_login)
+  const currentOrigin =
+    typeof window === 'undefined' ? '' : window.location.origin
   const hasOAuthLogin = Boolean(
-    status?.github_oauth ||
-    status?.discord_oauth ||
-    status?.oidc_enabled ||
-    status?.linuxdo_oauth ||
+    (status?.github_oauth &&
+      isOAuthProviderAvailableAtOrigin(status, 'github', currentOrigin)) ||
+    (status?.discord_oauth &&
+      isOAuthProviderAvailableAtOrigin(status, 'discord', currentOrigin)) ||
+    (status?.oidc_enabled &&
+      isOAuthProviderAvailableAtOrigin(status, 'oidc', currentOrigin)) ||
+    (status?.linuxdo_oauth &&
+      isOAuthProviderAvailableAtOrigin(status, 'linuxdo', currentOrigin)) ||
     status?.telegram_oauth ||
-    (status?.custom_oauth_providers?.length ?? 0) > 0
+    ((status?.custom_oauth_providers?.length ?? 0) > 0 &&
+      isOAuthProviderAvailableAtOrigin(status, 'custom', currentOrigin))
   )
   const hasAlternativeLogin =
     passkeyLoginEnabled || hasWeChatLogin || hasOAuthLogin

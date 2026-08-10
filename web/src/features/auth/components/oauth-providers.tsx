@@ -30,6 +30,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
 import { useOAuthLogin } from '../hooks/use-oauth-login'
+import { isOAuthProviderAvailableAtOrigin } from '../lib/oauth-callback-policy'
 import type { SystemStatus } from '../types'
 import { TelegramLoginDialog } from './telegram-login-dialog'
 
@@ -74,6 +75,8 @@ export function OAuthProviders({
     handleTelegramAuthorization,
     setIsTelegramDialogOpen,
   } = useOAuthLogin(status, redirectTo)
+  const currentOrigin =
+    typeof window === 'undefined' ? '' : window.location.origin
 
   const providerButtons: ProviderButton[] = []
 
@@ -87,7 +90,10 @@ export function OAuthProviders({
     })
   }
 
-  if (status?.github_oauth) {
+  if (
+    status?.github_oauth &&
+    isOAuthProviderAvailableAtOrigin(status, 'github', currentOrigin)
+  ) {
     providerButtons.push({
       key: 'github',
       label: githubButtonText || t('Continue with GitHub'),
@@ -97,7 +103,10 @@ export function OAuthProviders({
     })
   }
 
-  if (status?.discord_oauth) {
+  if (
+    status?.discord_oauth &&
+    isOAuthProviderAvailableAtOrigin(status, 'discord', currentOrigin)
+  ) {
     providerButtons.push({
       key: 'discord',
       label: t('Continue with Discord'),
@@ -106,7 +115,10 @@ export function OAuthProviders({
     })
   }
 
-  if (status?.oidc_enabled) {
+  if (
+    status?.oidc_enabled &&
+    isOAuthProviderAvailableAtOrigin(status, 'oidc', currentOrigin)
+  ) {
     const oidcDisplayName = status.oidc_display_name?.trim() || 'OIDC'
     providerButtons.push({
       key: 'oidc',
@@ -117,7 +129,10 @@ export function OAuthProviders({
     })
   }
 
-  if (status?.linuxdo_oauth) {
+  if (
+    status?.linuxdo_oauth &&
+    isOAuthProviderAvailableAtOrigin(status, 'linuxdo', currentOrigin)
+  ) {
     providerButtons.push({
       key: 'linuxdo',
       label: t('Continue with LinuxDO'),
@@ -137,7 +152,11 @@ export function OAuthProviders({
 
   // Custom OAuth providers
   const customProviders = status?.custom_oauth_providers
-  if (customProviders && customProviders.length > 0) {
+  if (
+    customProviders &&
+    customProviders.length > 0 &&
+    isOAuthProviderAvailableAtOrigin(status, 'custom', currentOrigin)
+  ) {
     for (const provider of customProviders) {
       providerButtons.push({
         key: `custom-${provider.slug}`,

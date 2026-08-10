@@ -104,8 +104,8 @@ depends on the provider's callback model:
 | GitHub       | Register only `https://newapi.withcortex.ai/oauth/github`. A GitHub OAuth App has one callback setting, but GitHub's documented matching accepts `https://llmapi.withcortex.ai/oauth/github` and `https://newapicn.withcortex.ai/oauth/github` because the host excluding subdomains, port, and callback path match. See [GitHub's redirect URL rules](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps#redirect-urls). |
 | Discord      | Register all three exact callbacks: `https://newapi.withcortex.ai/oauth/discord`, `https://llmapi.withcortex.ai/oauth/discord`, and `https://newapicn.withcortex.ai/oauth/discord`. [Discord applications expose a `redirect_uris` list](https://docs.discord.com/developers/resources/application#application-object-application-structure).                                                                                                                |
 | OIDC         | Register all three exact callbacks: `https://newapi.withcortex.ai/oauth/oidc`, `https://llmapi.withcortex.ai/oauth/oidc`, and `https://newapicn.withcortex.ai/oauth/oidc`. [OIDC clients define a `redirect_uris` array](https://openid.net/specs/openid-connect-registration-1_0.html#ClientMetadata); every used value must be registered exactly.                                                                                                         |
-| LinuxDO      | Register the three `/oauth/linuxdo` callbacks only if the provider client supports multiple callback URLs. Do not assume GitHub-style subdomain matching.                                                                                                                                                                                                                                                                                                    |
-| Custom OAuth | Replace `<slug>` in `/oauth/<slug>` and register each exact origin supported by that provider. If it accepts only one callback, expose login only on that supported origin or configure separate provider credentials; do not weaken the gateway's origin validation.                                                                                                                                                                                        |
+| LinuxDO      | Register only `https://newapi.withcortex.ai/oauth/linuxdo`. The gateway does not offer LinuxDO login or binding on trusted aliases because this deployment has one client configuration and no checked multi-callback capability.                                                                                                                                                                                                                            |
+| Custom OAuth | Replace `<slug>` in `https://newapi.withcortex.ai/oauth/<slug>` and register that canonical callback. Custom providers are not offered on trusted aliases because each provider has one client configuration and no per-origin capability setting.                                                                                                                                                                                                           |
 
 Keep the three origins in `.do/new-api-intl.yaml`'s
 `SESSION_COOKIE_TRUSTED_URL` value synchronized with the callback origins each
@@ -113,6 +113,13 @@ provider supports.
 Authorization and token exchange use the initiating origin bound to the
 one-time OAuth state; exact-origin validation must not be replaced with
 wildcards.
+
+The same callback policy is enforced by `POST /api/oauth/state` and by the
+sign-in and account-binding interfaces: GitHub, Discord, and OIDC are visible
+on the two trusted aliases; LinuxDO and custom OAuth providers are visible only
+on the canonical hostname. In insecure loopback development, every provider
+remains available on the exact browser origin accepted by the local callback
+gate.
 
 The logo URL uses the canonical `newapi.withcortex.ai` hostname. While DNS is
 pending, production may temporarily use the DigitalOcean ingress hostname for

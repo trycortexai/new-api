@@ -49,6 +49,7 @@ func GetStatus(c *gin.Context) {
 
 	passkeySetting := system_setting.GetPasskeySettings()
 	legalSetting := system_setting.GetLegalSettings()
+	oauthCanonicalOrigin, _ := common.NormalizeOrigin(system_setting.ServerAddress)
 
 	data := gin.H{
 		"version":                     common.Version,
@@ -124,6 +125,10 @@ func GetStatus(c *gin.Context) {
 		"privacy_policy_enabled":      legalSetting.PrivacyPolicy != "",
 		"checkin_enabled":             operation_setting.GetCheckinSetting().Enabled,
 	}
+	data["oauth_canonical_origin"] = oauthCanonicalOrigin
+	data["session_cookie_secure"] = common.SessionCookieSecure
+	data["oauth_trusted_alias_providers"] = append([]string(nil), oauthTrustedAliasProviders...)
+	data["oauth_trusted_origins"] = oauthConfiguredTrustedOrigins()
 
 	// 根据启用状态注入可选内容
 	if cs.ApiInfoEnabled {

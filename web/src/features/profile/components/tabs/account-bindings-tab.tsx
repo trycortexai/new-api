@@ -37,6 +37,7 @@ import {
   getOAuthSessionStorage,
   markOAuthBindPopup,
 } from '@/features/auth/lib/oauth-callback-mode'
+import { isOAuthProviderAvailableAtOrigin } from '@/features/auth/lib/oauth-callback-policy'
 import type { CustomOAuthProviderInfo } from '@/features/auth/types'
 import { useDialogs } from '@/hooks/use-dialog'
 import { useStatus } from '@/hooks/use-status'
@@ -99,6 +100,8 @@ export function AccountBindingsTab({
   )
   const [unbinding, setUnbinding] = useState(false)
   const pendingOAuthBinding = useRef<PendingOAuthBinding | null>(null)
+  const currentOrigin =
+    typeof window === 'undefined' ? '' : window.location.origin
 
   const clearPendingOAuthBinding = useCallback(
     (expected?: PendingOAuthBinding) => {
@@ -110,9 +113,13 @@ export function AccountBindingsTab({
     []
   )
 
-  const customProviders = status?.custom_oauth_providers as
-    | CustomOAuthProviderInfo[]
-    | undefined
+  const customProviders = isOAuthProviderAvailableAtOrigin(
+    status,
+    'custom',
+    currentOrigin
+  )
+    ? (status?.custom_oauth_providers as CustomOAuthProviderInfo[] | undefined)
+    : undefined
 
   const fetchCustomBindings = useCallback(async () => {
     if (!customProviders || customProviders.length === 0) return
@@ -332,7 +339,9 @@ export function AccountBindingsTab({
         isBound: Boolean(
           (profile as unknown as Record<string, unknown>).github_id
         ),
-        isEnabled: status?.github_oauth || false,
+        isEnabled:
+          Boolean(status?.github_oauth) &&
+          isOAuthProviderAvailableAtOrigin(status, 'github', currentOrigin),
         onBind: () => {
           const clientId = status?.github_client_id
           if (clientId) {
@@ -352,7 +361,9 @@ export function AccountBindingsTab({
         isBound: Boolean(
           (profile as unknown as Record<string, unknown>).discord_id
         ),
-        isEnabled: status?.discord_oauth || false,
+        isEnabled:
+          Boolean(status?.discord_oauth) &&
+          isOAuthProviderAvailableAtOrigin(status, 'discord', currentOrigin),
         onBind: () => {
           const clientId = status?.discord_client_id
           if (clientId) {
@@ -372,7 +383,9 @@ export function AccountBindingsTab({
         isBound: Boolean(
           (profile as unknown as Record<string, unknown>).oidc_id
         ),
-        isEnabled: status?.oidc_enabled || false,
+        isEnabled:
+          Boolean(status?.oidc_enabled) &&
+          isOAuthProviderAvailableAtOrigin(status, 'oidc', currentOrigin),
         onBind: () => {
           const authorizationEndpoint = status?.oidc_authorization_endpoint
           const clientId = status?.oidc_client_id
@@ -411,7 +424,9 @@ export function AccountBindingsTab({
         isBound: Boolean(
           (profile as unknown as Record<string, unknown>).linux_do_id
         ),
-        isEnabled: status?.linuxdo_oauth || false,
+        isEnabled:
+          Boolean(status?.linuxdo_oauth) &&
+          isOAuthProviderAvailableAtOrigin(status, 'linuxdo', currentOrigin),
         onBind: () => {
           const clientId = status?.linuxdo_client_id
           if (clientId) {

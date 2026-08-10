@@ -896,7 +896,7 @@ export function OAuthSection(props: OAuthSectionProps) {
                     'Set these values in the provider application before enabling login.'
                   )}
                   registrationGuidance={t(
-                    'If the provider supports multiple callback URLs, register the displayed path on every exact origin configured in SESSION_COOKIE_TRUSTED_URL. Otherwise, use only callback origins supported by that provider.'
+                    'LinuxDO uses the displayed canonical callback only and is not offered on trusted aliases.'
                   )}
                   rows={[
                     {

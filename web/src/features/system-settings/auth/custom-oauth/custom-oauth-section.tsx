@@ -84,7 +84,7 @@ export function CustomOAuthSection(props: CustomOAuthSectionProps) {
           </p>
           <p>
             {t(
-              'If the provider supports multiple callback URLs, register the displayed path on every exact origin configured in SESSION_COOKIE_TRUSTED_URL. Otherwise, use only callback origins supported by that provider.'
+              'Custom OAuth providers use the displayed canonical callback only and are not offered on trusted aliases.'
             )}
           </p>
           <div className='flex min-w-0 flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between'>

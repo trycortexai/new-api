@@ -22,6 +22,26 @@ import (
 
 const oauthAuthFlowTTL = 10 * time.Minute
 
+var oauthTrustedAliasProviders = []string{"github", "discord", "oidc"}
+
+func oauthConfiguredTrustedOrigins() []string {
+	canonicalOrigin, _ := common.NormalizeOrigin(system_setting.ServerAddress)
+	seen := map[string]struct{}{}
+	origins := make([]string, 0, len(common.SessionCookieTrustedURLs))
+	for _, rawOrigin := range common.SessionCookieTrustedURLs {
+		origin, err := common.NormalizeOrigin(rawOrigin)
+		if err != nil || origin == canonicalOrigin {
+			continue
+		}
+		if _, exists := seen[origin]; exists {
+			continue
+		}
+		seen[origin] = struct{}{}
+		origins = append(origins, origin)
+	}
+	return origins
+}
+
 type oauthStateRequest struct {
 	Provider       string `json:"provider"`
 	Intent         string `json:"intent"`
@@ -77,6 +97,29 @@ func isAllowedOAuthOrigin(origin string) bool {
 	return isConfiguredOAuthOrigin(origin) || isInsecureLocalDevelopmentOAuthOrigin(origin)
 }
 
+func oauthProviderSupportsTrustedAlias(provider string) bool {
+	if oauth.IsCustomProvider(provider) {
+		return false
+	}
+	for _, aliasProvider := range oauthTrustedAliasProviders {
+		if provider == aliasProvider {
+			return true
+		}
+	}
+	return false
+}
+
+func isOAuthProviderAllowedAtOrigin(provider, origin string) bool {
+	canonicalOrigin, err := common.NormalizeOrigin(system_setting.ServerAddress)
+	if err == nil && origin == canonicalOrigin {
+		return true
+	}
+	if isInsecureLocalDevelopmentOAuthOrigin(origin) {
+		return true
+	}
+	return oauthProviderSupportsTrustedAlias(provider)
+}
+
 func isAllowedOAuthStartOrigin(requestedOrigin string, request *http.Request) bool {
 	origin, err := common.NormalizeOrigin(requestedOrigin)
 	if err != nil {
@@ -112,7 +155,7 @@ func validateOAuthCallbackURI(provider, callbackURI string) (string, error) {
 		return "", errors.New("OAuth callback path is invalid")
 	}
 	origin, err := common.NormalizeOrigin(parsedCallback.Scheme + "://" + parsedCallback.Host)
-	if err != nil || !isAllowedOAuthOrigin(origin) {
+	if err != nil || !isAllowedOAuthOrigin(origin) || !isOAuthProviderAllowedAtOrigin(provider, origin) {
 		return "", errors.New("OAuth callback origin is not allowed")
 	}
 	return origin + expectedPath, nil
@@ -123,7 +166,7 @@ func resolveOAuthCallbackURI(provider, requestedOrigin string) (string, error) {
 		requestedOrigin = system_setting.ServerAddress
 	}
 	origin, err := common.NormalizeOrigin(requestedOrigin)
-	if err != nil || !isAllowedOAuthOrigin(origin) {
+	if err != nil || !isAllowedOAuthOrigin(origin) || !isOAuthProviderAllowedAtOrigin(provider, origin) {
 		return "", errors.New("OAuth redirect origin is not allowed")
 	}
 	return origin + "/oauth/" + url.PathEscape(provider), nil

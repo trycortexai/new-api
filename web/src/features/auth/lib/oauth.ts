@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import type { SystemStatus, OAuthProvider } from '../types'
+import { isOAuthProviderAvailableAtOrigin } from './oauth-callback-policy'
 
 export {
   buildGitHubOAuthUrl,
@@ -34,13 +35,17 @@ export {
  * Get available OAuth providers from system status
  */
 export function getAvailableOAuthProviders(
-  status: SystemStatus | null
+  status: SystemStatus | null,
+  currentOrigin = typeof window === 'undefined' ? '' : window.location.origin
 ): OAuthProvider[] {
   if (!status) return []
 
   const providers: OAuthProvider[] = []
 
-  if (status.github_oauth) {
+  if (
+    status.github_oauth &&
+    isOAuthProviderAvailableAtOrigin(status, 'github', currentOrigin)
+  ) {
     providers.push({
       name: 'GitHub',
       type: 'github',
@@ -49,7 +54,10 @@ export function getAvailableOAuthProviders(
     })
   }
 
-  if (status.discord_oauth) {
+  if (
+    status.discord_oauth &&
+    isOAuthProviderAvailableAtOrigin(status, 'discord', currentOrigin)
+  ) {
     providers.push({
       name: 'Discord',
       type: 'discord',
@@ -58,7 +66,10 @@ export function getAvailableOAuthProviders(
     })
   }
 
-  if (status.oidc_enabled) {
+  if (
+    status.oidc_enabled &&
+    isOAuthProviderAvailableAtOrigin(status, 'oidc', currentOrigin)
+  ) {
     providers.push({
       name: 'OIDC',
       type: 'oidc',
@@ -68,7 +79,10 @@ export function getAvailableOAuthProviders(
     })
   }
 
-  if (status.linuxdo_oauth) {
+  if (
+    status.linuxdo_oauth &&
+    isOAuthProviderAvailableAtOrigin(status, 'linuxdo', currentOrigin)
+  ) {
     providers.push({
       name: 'LinuxDO',
       type: 'linuxdo',
@@ -91,14 +105,23 @@ export function getAvailableOAuthProviders(
 /**
  * Check if any OAuth provider is available
  */
-export function hasOAuthProviders(status: SystemStatus | null): boolean {
+export function hasOAuthProviders(
+  status: SystemStatus | null,
+  currentOrigin = typeof window === 'undefined' ? '' : window.location.origin
+): boolean {
   if (!status) return false
   return !!(
-    status.github_oauth ||
-    status.discord_oauth ||
-    status.oidc_enabled ||
-    status.linuxdo_oauth ||
+    (status.github_oauth &&
+      isOAuthProviderAvailableAtOrigin(status, 'github', currentOrigin)) ||
+    (status.discord_oauth &&
+      isOAuthProviderAvailableAtOrigin(status, 'discord', currentOrigin)) ||
+    (status.oidc_enabled &&
+      isOAuthProviderAvailableAtOrigin(status, 'oidc', currentOrigin)) ||
+    (status.linuxdo_oauth &&
+      isOAuthProviderAvailableAtOrigin(status, 'linuxdo', currentOrigin)) ||
     status.telegram_oauth ||
-    status.wechat_login
+    status.wechat_login ||
+    ((status.custom_oauth_providers?.length ?? 0) > 0 &&
+      isOAuthProviderAvailableAtOrigin(status, 'custom', currentOrigin))
   )
 }
