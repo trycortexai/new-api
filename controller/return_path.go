@@ -17,3 +17,11 @@ func paymentReturnPathForHost(host string, suffix string) string {
 	}
 	return paymentReturnPath(suffix)
 }
+
+func paymentCallbackPathForHost(host, callbackAddress, suffix string) string {
+	base := strings.TrimRight(callbackAddress, "/")
+	if isModelVisaHost(host) {
+		base = modelVisaServerAddress
+	}
+	return base + suffix
+}

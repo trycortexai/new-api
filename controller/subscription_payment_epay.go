@@ -64,7 +64,7 @@ func SubscriptionRequestEpay(c *gin.Context) {
 	}
 
 	callBackAddress := service.GetCallbackAddress()
-	returnUrl, err := url.Parse(paymentReturnPathForHost(c.Request.Host, "/api/subscription/epay/return"))
+	returnUrl, err := url.Parse(paymentCallbackPathForHost(c.Request.Host, callBackAddress, "/api/subscription/epay/return"))
 	if err != nil {
 		common.ApiErrorMsg(c, "回调地址配置错误")
 		return

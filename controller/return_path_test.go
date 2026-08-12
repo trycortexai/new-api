@@ -46,3 +46,21 @@ func TestPaymentReturnPathForHostPreservesModelVisaOrigin(t *testing.T) {
 		})
 	}
 }
+
+func TestPaymentCallbackPathForHostPreservesConfiguredCallbackOrigin(t *testing.T) {
+	tests := []struct {
+		name string
+		host string
+		want string
+	}{
+		{name: "ModelVisa override", host: "modelvisa.com", want: "https://modelvisa.com/api/subscription/epay/return"},
+		{name: "canonical custom callback", host: "newapi.withcortex.ai", want: "https://callbacks.example.com/api/subscription/epay/return"},
+		{name: "untrusted subdomain", host: "pay.modelvisa.com", want: "https://callbacks.example.com/api/subscription/epay/return"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, paymentCallbackPathForHost(tt.host, "https://callbacks.example.com/", "/api/subscription/epay/return"))
+		})
+	}
+}
