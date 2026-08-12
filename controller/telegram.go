@@ -234,6 +234,10 @@ func telegramBindFailure(c *gin.Context, errorCode string) {
 }
 
 func TelegramLogin(c *gin.Context) {
+	if isModelVisaHost(c.Request.Host) {
+		common.ApiErrorMsg(c, "ModelVisa 暂不支持 Telegram 登录")
+		return
+	}
 	if !common.TelegramOAuthEnabled {
 		c.JSON(200, gin.H{
 			"message": "管理员未开启通过 Telegram 登录以及注册",
