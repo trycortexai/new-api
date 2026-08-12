@@ -6,6 +6,7 @@ import (
 
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/relayconvert/convmeta"
+	"github.com/QuantumNous/new-api/relaykit/relayconvert/kitutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -56,4 +57,39 @@ func TestOpenAIChatRequestToClaudeMessagesPreservesSystemAndDeveloperInstruction
 	assert.Equal(t, "Second developer instruction.", systemMessages[2].GetText())
 	require.Len(t, got.Messages, 1)
 	assert.Equal(t, "user", got.Messages[0].Role)
+}
+
+func TestOpenAIChatRequestToClaudeMessagesPreservesCacheStableInstructionPrefix(t *testing.T) {
+	maxTokens := uint(64)
+	cacheControl := []byte(`{"type":"ephemeral"}`)
+	prefixes := []string{"Stable developer instruction.", "Stable developer instruction.", "Changed developer instruction."}
+	serializedSystems := make([][]byte, 0, len(prefixes))
+
+	for _, prefix := range prefixes {
+		got, err := OpenAIChatRequestToClaudeMessages(context.Background(), &convmeta.Values{}, dto.GeneralOpenAIRequest{
+			Model:     "claude-test",
+			MaxTokens: &maxTokens,
+			Messages: []dto.Message{
+				{Role: "system", Content: []any{
+					dto.MediaContent{Type: "text", Text: "Stable system instruction.", CacheControl: cacheControl},
+				}},
+				{Role: "developer", Content: []any{
+					dto.MediaContent{Type: "text", Text: prefix, CacheControl: cacheControl},
+				}},
+				{Role: "user", Content: "echo hi"},
+			},
+		})
+		require.NoError(t, err)
+
+		serializedSystem, err := kitutil.Marshal(got.System)
+		require.NoError(t, err)
+		serializedSystems = append(serializedSystems, serializedSystem)
+	}
+
+	assert.JSONEq(t, `[
+		{"type":"text","text":"Stable system instruction.","cache_control":{"type":"ephemeral"}},
+		{"type":"text","text":"Stable developer instruction.","cache_control":{"type":"ephemeral"}}
+	]`, string(serializedSystems[0]))
+	assert.Equal(t, serializedSystems[0], serializedSystems[1])
+	assert.NotEqual(t, serializedSystems[0], serializedSystems[2])
 }
