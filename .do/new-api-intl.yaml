@@ -6,6 +6,8 @@ domains:
     type: PRIMARY
   - domain: llmapi.withcortex.ai
     type: ALIAS
+  - domain: modelvisa.com
+    type: ALIAS
 
 alerts:
   - rule: DEPLOYMENT_FAILED
@@ -50,7 +52,7 @@ services:
         scope: RUN_TIME
         type: GENERAL
       - key: SESSION_COOKIE_TRUSTED_URL
-        value: https://newapi.withcortex.ai,https://llmapi.withcortex.ai,https://newapicn.withcortex.ai
+        value: https://newapi.withcortex.ai,https://llmapi.withcortex.ai,https://newapicn.withcortex.ai,https://modelvisa.com
         scope: RUN_TIME
         type: GENERAL
       - key: TZ

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"strings"
 
@@ -21,6 +22,26 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+const (
+	modelVisaHost          = "modelvisa.com"
+	modelVisaName          = "ModelVisa"
+	modelVisaLogoURL       = "/modelvisa-logo.svg"
+	modelVisaServerAddress = "https://modelvisa.com"
+)
+
+func isModelVisaHost(host string) bool {
+	host = strings.TrimSpace(host)
+	if hostname, _, err := net.SplitHostPort(host); err == nil {
+		host = hostname
+	}
+	host = strings.TrimSuffix(host, ".")
+	return strings.EqualFold(host, modelVisaHost)
+}
+
+func modelVisaContent(content string) string {
+	return strings.ReplaceAll(content, "Cortex", modelVisaName)
+}
 
 func TestStatus(c *gin.Context) {
 	err := model.PingDB()
@@ -124,6 +145,12 @@ func GetStatus(c *gin.Context) {
 		"user_agreement_enabled":      legalSetting.UserAgreement != "",
 		"privacy_policy_enabled":      legalSetting.PrivacyPolicy != "",
 		"checkin_enabled":             operation_setting.GetCheckinSetting().Enabled,
+	}
+	if isModelVisaHost(c.Request.Host) {
+		data["system_name"] = modelVisaName
+		data["logo"] = modelVisaLogoURL
+		data["server_address"] = modelVisaServerAddress
+		data["footer_html"] = modelVisaContent(common.Footer)
 	}
 	data["oauth_canonical_origin"] = oauthCanonicalOrigin
 	data["session_cookie_secure"] = common.SessionCookieSecure
@@ -231,10 +258,14 @@ func GetMidjourney(c *gin.Context) {
 func GetHomePageContent(c *gin.Context) {
 	common.OptionMapRWMutex.RLock()
 	defer common.OptionMapRWMutex.RUnlock()
+	homePageContent := common.OptionMap["HomePageContent"]
+	if isModelVisaHost(c.Request.Host) {
+		homePageContent = modelVisaContent(homePageContent)
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    common.OptionMap["HomePageContent"],
+		"data":    homePageContent,
 	})
 	return
 }
