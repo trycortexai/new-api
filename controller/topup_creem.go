@@ -64,6 +64,10 @@ type CreemAdaptor struct {
 }
 
 func (*CreemAdaptor) RequestPay(c *gin.Context, req *CreemPayRequest) {
+	if !isPaymentMethodAvailableForHost(c.Request.Host, model.PaymentMethodCreem) {
+		common.ApiErrorMsg(c, "ModelVisa 暂不支持 Creem 支付")
+		return
+	}
 	if req.PaymentMethod != model.PaymentMethodCreem {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "不支持的支付渠道"})
 		return

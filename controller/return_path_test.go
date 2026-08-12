@@ -25,6 +25,7 @@ func TestPaymentReturnPathUsesDefaultDashboardRoutes(t *testing.T) {
 }
 
 func TestPaymentReturnPathForHostPreservesModelVisaOrigin(t *testing.T) {
+	enableModelVisaHostPolicy(t)
 	previousAddress := system_setting.ServerAddress
 	system_setting.ServerAddress = "https://newapi.withcortex.ai/"
 	t.Cleanup(func() { system_setting.ServerAddress = previousAddress })
@@ -48,6 +49,7 @@ func TestPaymentReturnPathForHostPreservesModelVisaOrigin(t *testing.T) {
 }
 
 func TestPaymentCallbackPathForHostPreservesConfiguredCallbackOrigin(t *testing.T) {
+	enableModelVisaHostPolicy(t)
 	tests := []struct {
 		name string
 		host string

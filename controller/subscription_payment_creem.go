@@ -21,6 +21,10 @@ type SubscriptionCreemPayRequest struct {
 }
 
 func SubscriptionRequestCreemPay(c *gin.Context) {
+	if !isPaymentMethodAvailableForHost(c.Request.Host, model.PaymentMethodCreem) {
+		common.ApiErrorMsg(c, "ModelVisa 暂不支持 Creem 支付")
+		return
+	}
 	if !requirePaymentCompliance(c) {
 		return
 	}

@@ -13,6 +13,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func enableModelVisaHostPolicy(t *testing.T) {
+	t.Helper()
+	previousTrustedURLs := common.SessionCookieTrustedURLs
+	common.SessionCookieTrustedURLs = append(append([]string(nil), previousTrustedURLs...), modelVisaServerAddress)
+	t.Cleanup(func() { common.SessionCookieTrustedURLs = previousTrustedURLs })
+}
+
 func TestUpdateOptionRejectsRetiredFrontendTheme(t *testing.T) {
 	response := httptest.NewRecorder()
 	context, _ := gin.CreateTestContext(response)
@@ -48,6 +55,7 @@ func TestGetStatusAdvertisesDefaultDashboard(t *testing.T) {
 }
 
 func TestGetStatusAppliesModelVisaBrandOnlyToModelVisaHost(t *testing.T) {
+	enableModelVisaHostPolicy(t)
 	previousFooter := common.Footer
 	previousMap := common.OptionMap
 	previousServerAddress := system_setting.ServerAddress
@@ -181,6 +189,7 @@ func TestGetStatusAppliesModelVisaBrandOnlyToModelVisaHost(t *testing.T) {
 }
 
 func TestGetHomePageContentAppliesModelVisaBrandOnlyToModelVisaHost(t *testing.T) {
+	enableModelVisaHostPolicy(t)
 	previousMap := common.OptionMap
 	canonicalContent := `<h1>Cortex</h1><p>Cortex API and cortex client</p><p>New API by QuantumNous</p>`
 	common.OptionMap = map[string]string{"HomePageContent": canonicalContent}
@@ -234,6 +243,7 @@ func TestGetHomePageContentAppliesModelVisaBrandOnlyToModelVisaHost(t *testing.T
 }
 
 func TestAccountEmailBrandingFollowsRequestHost(t *testing.T) {
+	enableModelVisaHostPolicy(t)
 	previousSystemName := common.SystemName
 	previousServerAddress := system_setting.ServerAddress
 	common.SystemName = "Cortex"
@@ -271,4 +281,22 @@ func TestAccountEmailBrandingFollowsRequestHost(t *testing.T) {
 			assert.Contains(t, resetContent, tt.wantServerAddress+"/user/reset?email=user@example.com&token=reset-token")
 		})
 	}
+}
+
+func TestAccountEmailBrandingRejectsUnconfiguredModelVisaHost(t *testing.T) {
+	previousTrustedURLs := common.SessionCookieTrustedURLs
+	previousSystemName := common.SystemName
+	previousServerAddress := system_setting.ServerAddress
+	common.SessionCookieTrustedURLs = []string{"https://llmapi.withcortex.ai"}
+	common.SystemName = "Cortex"
+	system_setting.ServerAddress = "https://selfhost.example.com"
+	t.Cleanup(func() {
+		common.SessionCookieTrustedURLs = previousTrustedURLs
+		common.SystemName = previousSystemName
+		system_setting.ServerAddress = previousServerAddress
+	})
+
+	brand := accountEmailBrandForHost(modelVisaHost)
+	assert.Equal(t, "Cortex", brand.Name)
+	assert.Equal(t, "https://selfhost.example.com", brand.ServerAddress)
 }

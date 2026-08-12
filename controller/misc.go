@@ -36,7 +36,16 @@ func isModelVisaHost(host string) bool {
 		host = hostname
 	}
 	host = strings.TrimSuffix(host, ".")
-	return strings.EqualFold(host, modelVisaHost)
+	if !strings.EqualFold(host, modelVisaHost) {
+		return false
+	}
+	for _, trustedOrigin := range common.SessionCookieTrustedURLs {
+		normalizedOrigin, err := common.NormalizeOrigin(trustedOrigin)
+		if err == nil && normalizedOrigin == modelVisaServerAddress {
+			return true
+		}
+	}
+	return false
 }
 
 func modelVisaContent(content string) string {
