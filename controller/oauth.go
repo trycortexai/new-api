@@ -97,11 +97,26 @@ func isAllowedOAuthOrigin(origin string) bool {
 	return isConfiguredOAuthOrigin(origin) || isInsecureLocalDevelopmentOAuthOrigin(origin)
 }
 
-func oauthProviderSupportsTrustedAlias(provider string) bool {
+func oauthTrustedAliasProvidersForHost(host string) []string {
+	if isModelVisaHost(host) {
+		return nil
+	}
+	return oauthTrustedAliasProviders
+}
+
+func oauthTrustedAliasProvidersForOrigin(origin string) []string {
+	parsedOrigin, err := url.Parse(origin)
+	if err != nil {
+		return nil
+	}
+	return oauthTrustedAliasProvidersForHost(parsedOrigin.Host)
+}
+
+func oauthProviderSupportsTrustedAlias(provider, origin string) bool {
 	if oauth.IsCustomProvider(provider) {
 		return false
 	}
-	for _, aliasProvider := range oauthTrustedAliasProviders {
+	for _, aliasProvider := range oauthTrustedAliasProvidersForOrigin(origin) {
 		if provider == aliasProvider {
 			return true
 		}
@@ -117,7 +132,7 @@ func isOAuthProviderAllowedAtOrigin(provider, origin string) bool {
 	if isInsecureLocalDevelopmentOAuthOrigin(origin) {
 		return true
 	}
-	return oauthProviderSupportsTrustedAlias(provider)
+	return oauthProviderSupportsTrustedAlias(provider, origin)
 }
 
 func isAllowedOAuthStartOrigin(requestedOrigin string, request *http.Request) bool {

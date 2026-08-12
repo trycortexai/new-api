@@ -219,6 +219,61 @@ func TestGenerateOAuthCodeRejectsCanonicalOnlyProvidersOnTrustedAliases(t *testi
 	}
 }
 
+func TestGenerateOAuthCodeRejectsProvidersOnModelVisaAlias(t *testing.T) {
+	setupAuthFlowControllerTest(t)
+	previousAddress := system_setting.ServerAddress
+	previousTrustedURLs := common.SessionCookieTrustedURLs
+	system_setting.ServerAddress = "https://newapi.withcortex.ai"
+	common.SessionCookieTrustedURLs = []string{
+		"https://llmapi.withcortex.ai",
+		modelVisaServerAddress,
+	}
+	t.Cleanup(func() {
+		system_setting.ServerAddress = previousAddress
+		common.SessionCookieTrustedURLs = previousTrustedURLs
+	})
+
+	tests := []struct {
+		name           string
+		redirectOrigin string
+		wantStatus     int
+	}{
+		{
+			name:           "existing trusted alias remains allowed",
+			redirectOrigin: "https://llmapi.withcortex.ai",
+			wantStatus:     http.StatusOK,
+		},
+		{
+			name:           "ModelVisa alias rejects GitHub",
+			redirectOrigin: modelVisaServerAddress,
+			wantStatus:     http.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			body := fmt.Sprintf(`{"provider":"github","intent":"login","redirect_origin":%q}`, tt.redirectOrigin)
+			c.Request = httptest.NewRequest(http.MethodPost, "/api/oauth/state", strings.NewReader(body))
+			c.Request.Header.Set("Content-Type", "application/json")
+
+			GenerateOAuthCode(c)
+
+			assert.Equal(t, tt.wantStatus, recorder.Code)
+			callbackURI := tt.redirectOrigin + "/oauth/github"
+			validatedCallback, err := validateOAuthCallbackURI("github", callbackURI)
+			if tt.wantStatus == http.StatusOK {
+				require.NoError(t, err)
+				assert.Equal(t, callbackURI, validatedCallback)
+			} else {
+				assert.Error(t, err)
+				assert.Empty(t, validatedCallback)
+			}
+		})
+	}
+}
+
 func TestGenerateOAuthCodeRejectsUntrustedCallbackOrigins(t *testing.T) {
 	setupAuthFlowControllerTest(t)
 	previousAddress := system_setting.ServerAddress
