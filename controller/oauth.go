@@ -176,6 +176,22 @@ func validateOAuthCallbackURI(provider, callbackURI string) (string, error) {
 	return origin + expectedPath, nil
 }
 
+func oauthCallbackMatchesRequestHost(request *http.Request, callbackURI string) bool {
+	if request == nil || isModelVisaHost(request.Host) {
+		return false
+	}
+	parsedCallback, err := url.Parse(callbackURI)
+	if err != nil {
+		return false
+	}
+	callbackOrigin, err := common.NormalizeOrigin(parsedCallback.Scheme + "://" + parsedCallback.Host)
+	if err != nil {
+		return false
+	}
+	requestOrigin, err := common.NormalizeOrigin(parsedCallback.Scheme + "://" + request.Host)
+	return err == nil && requestOrigin == callbackOrigin
+}
+
 func resolveOAuthCallbackURI(provider, requestedOrigin string) (string, error) {
 	if requestedOrigin == "" {
 		requestedOrigin = system_setting.ServerAddress
@@ -301,6 +317,13 @@ func HandleOAuth(c *gin.Context) {
 	}
 	payload.RedirectURI, err = validateOAuthCallbackURI(providerName, payload.RedirectURI)
 	if err != nil {
+		c.JSON(http.StatusForbidden, gin.H{
+			"success": false,
+			"message": i18n.T(c, i18n.MsgOAuthStateInvalid),
+		})
+		return
+	}
+	if !oauthCallbackMatchesRequestHost(c.Request, payload.RedirectURI) {
 		c.JSON(http.StatusForbidden, gin.H{
 			"success": false,
 			"message": i18n.T(c, i18n.MsgOAuthStateInvalid),
