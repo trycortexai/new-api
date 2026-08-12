@@ -8,6 +8,8 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/setting"
+	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -34,6 +36,21 @@ func TestPaymentMethodAvailabilityForModelVisa(t *testing.T) {
 			assert.Equal(t, tt.want, isPaymentMethodAvailableForHost(tt.host, tt.method))
 		})
 	}
+}
+
+func TestWaffoReturnURLPreservesModelVisaOrigin(t *testing.T) {
+	enableModelVisaHostPolicy(t)
+	previousWaffoReturnURL := setting.WaffoReturnUrl
+	previousServerAddress := system_setting.ServerAddress
+	setting.WaffoReturnUrl = "https://payments.example.com/return"
+	system_setting.ServerAddress = "https://newapi.withcortex.ai"
+	t.Cleanup(func() {
+		setting.WaffoReturnUrl = previousWaffoReturnURL
+		system_setting.ServerAddress = previousServerAddress
+	})
+
+	assert.Equal(t, "https://modelvisa.com/wallet?show_history=true", waffoReturnURLForHost(modelVisaHost))
+	assert.Equal(t, "https://payments.example.com/return", waffoReturnURLForHost("newapi.withcortex.ai"))
 }
 
 func TestUnsupportedModelVisaPaymentHandlersRejectBeforeCheckout(t *testing.T) {
