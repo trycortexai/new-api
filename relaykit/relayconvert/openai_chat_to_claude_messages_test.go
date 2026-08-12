@@ -6,6 +6,7 @@ import (
 
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/relayconvert/convmeta"
+	"github.com/QuantumNous/new-api/relaykit/relayconvert/kitutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -56,4 +57,32 @@ func TestOpenAIChatRequestToClaudeMessagesPreservesSystemAndDeveloperInstruction
 	assert.Equal(t, "Second developer instruction.", systemMessages[2].GetText())
 	require.Len(t, got.Messages, 1)
 	assert.Equal(t, "user", got.Messages[0].Role)
+}
+
+func TestOpenAIChatRequestToClaudeMessagesPreservesCacheStableInstructionPrefix(t *testing.T) {
+	requests := []string{
+		`{"model":"claude-test","max_tokens":64,"messages":[{"role":"system","content":[{"type":"text","text":"Stable system instruction.","cache_control":{"type":"ephemeral"}}]},{"role":"developer","content":[{"type":"text","text":"Stable developer instruction.","cache_control":{"type":"ephemeral"}}]},{"role":"user","content":"echo hi"}]}`,
+		`{"model":"claude-test","max_tokens":64,"messages":[{"role":"system","content":[{"type":"text","text":"Stable system instruction.","cache_control":{"type":"ephemeral"}}]},{"role":"developer","content":[{"type":"text","text":"Stable developer instruction.","cache_control":{"type":"ephemeral"}}]},{"role":"user","content":"echo hi"}]}`,
+		`{"model":"claude-test","max_tokens":64,"messages":[{"role":"system","content":[{"type":"text","text":"Stable system instruction.","cache_control":{"type":"ephemeral"}}]},{"role":"developer","content":[{"type":"text","text":"Changed developer instruction.","cache_control":{"type":"ephemeral"}}]},{"role":"user","content":"echo hi"}]}`,
+	}
+	serializedSystems := make([][]byte, 0, len(requests))
+
+	for _, requestJSON := range requests {
+		var request dto.GeneralOpenAIRequest
+		require.NoError(t, kitutil.Unmarshal([]byte(requestJSON), &request))
+
+		got, err := OpenAIChatRequestToClaudeMessages(context.Background(), &convmeta.Values{}, request)
+		require.NoError(t, err)
+
+		serializedSystem, err := kitutil.Marshal(got.System)
+		require.NoError(t, err)
+		serializedSystems = append(serializedSystems, serializedSystem)
+	}
+
+	assert.JSONEq(t, `[
+		{"type":"text","text":"Stable system instruction.","cache_control":{"type":"ephemeral"}},
+		{"type":"text","text":"Stable developer instruction.","cache_control":{"type":"ephemeral"}}
+	]`, string(serializedSystems[0]))
+	assert.Equal(t, serializedSystems[0], serializedSystems[1])
+	assert.NotEqual(t, serializedSystems[0], serializedSystems[2])
 }
