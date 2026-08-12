@@ -49,6 +49,8 @@ func isModelVisaHost(host string) bool {
 }
 
 func modelVisaContent(content string) string {
+	content = strings.ReplaceAll(content, "https://withcortex.ai/", modelVisaServerAddress+"/")
+	content = strings.ReplaceAll(content, "withcortex.ai", modelVisaHost)
 	return strings.ReplaceAll(content, "Cortex", modelVisaName)
 }
 

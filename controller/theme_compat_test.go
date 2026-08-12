@@ -66,7 +66,7 @@ func TestGetStatusAppliesModelVisaBrandOnlyToModelVisaHost(t *testing.T) {
 	previousWeChatAuthEnabled := common.WeChatAuthEnabled
 	passkeySetting := system_setting.GetPasskeySettings()
 	previousPasskeyEnabled := passkeySetting.Enabled
-	common.Footer = `<p>Cortex gateway</p><p>cortex remains lowercase</p><p>New API by QuantumNous</p>`
+	common.Footer = `<p>Cortex gateway</p><a href="https://withcortex.ai/">withcortex.ai</a><p>cortex remains lowercase</p><p>New API by QuantumNous</p>`
 	common.OptionMap = map[string]string{}
 	system_setting.ServerAddress = "https://newapi.withcortex.ai"
 	common.PasswordLoginEnabled = true
@@ -102,7 +102,7 @@ func TestGetStatusAppliesModelVisaBrandOnlyToModelVisaHost(t *testing.T) {
 			systemName:    modelVisaName,
 			logo:          modelVisaLogoURL,
 			serverAddress: modelVisaServerAddress,
-			footer:        `<p>ModelVisa gateway</p><p>cortex remains lowercase</p><p>New API by QuantumNous</p>`,
+			footer:        `<p>ModelVisa gateway</p><a href="https://modelvisa.com/">modelvisa.com</a><p>cortex remains lowercase</p><p>New API by QuantumNous</p>`,
 			modelVisa:     true,
 		},
 		{
@@ -111,7 +111,7 @@ func TestGetStatusAppliesModelVisaBrandOnlyToModelVisaHost(t *testing.T) {
 			systemName:    modelVisaName,
 			logo:          modelVisaLogoURL,
 			serverAddress: modelVisaServerAddress,
-			footer:        `<p>ModelVisa gateway</p><p>cortex remains lowercase</p><p>New API by QuantumNous</p>`,
+			footer:        `<p>ModelVisa gateway</p><a href="https://modelvisa.com/">modelvisa.com</a><p>cortex remains lowercase</p><p>New API by QuantumNous</p>`,
 			modelVisa:     true,
 		},
 		{
@@ -120,7 +120,7 @@ func TestGetStatusAppliesModelVisaBrandOnlyToModelVisaHost(t *testing.T) {
 			systemName:    modelVisaName,
 			logo:          modelVisaLogoURL,
 			serverAddress: modelVisaServerAddress,
-			footer:        `<p>ModelVisa gateway</p><p>cortex remains lowercase</p><p>New API by QuantumNous</p>`,
+			footer:        `<p>ModelVisa gateway</p><a href="https://modelvisa.com/">modelvisa.com</a><p>cortex remains lowercase</p><p>New API by QuantumNous</p>`,
 			modelVisa:     true,
 		},
 		{
@@ -129,7 +129,7 @@ func TestGetStatusAppliesModelVisaBrandOnlyToModelVisaHost(t *testing.T) {
 			systemName:    modelVisaName,
 			logo:          modelVisaLogoURL,
 			serverAddress: modelVisaServerAddress,
-			footer:        `<p>ModelVisa gateway</p><p>cortex remains lowercase</p><p>New API by QuantumNous</p>`,
+			footer:        `<p>ModelVisa gateway</p><a href="https://modelvisa.com/">modelvisa.com</a><p>cortex remains lowercase</p><p>New API by QuantumNous</p>`,
 			modelVisa:     true,
 		},
 		{
@@ -191,7 +191,7 @@ func TestGetStatusAppliesModelVisaBrandOnlyToModelVisaHost(t *testing.T) {
 func TestGetHomePageContentAppliesModelVisaBrandOnlyToModelVisaHost(t *testing.T) {
 	enableModelVisaHostPolicy(t)
 	previousMap := common.OptionMap
-	canonicalContent := `<h1>Cortex</h1><p>Cortex API and cortex client</p><p>New API by QuantumNous</p>`
+	canonicalContent := `<h1>Cortex</h1><p>Cortex API and cortex client</p><a href="https://withcortex.ai/">withcortex.ai</a><p>New API by QuantumNous</p>`
 	common.OptionMap = map[string]string{"HomePageContent": canonicalContent}
 	t.Cleanup(func() { common.OptionMap = previousMap })
 
@@ -203,12 +203,12 @@ func TestGetHomePageContentAppliesModelVisaBrandOnlyToModelVisaHost(t *testing.T
 		{
 			name:     "exact host",
 			host:     "modelvisa.com",
-			expected: `<h1>ModelVisa</h1><p>ModelVisa API and cortex client</p><p>New API by QuantumNous</p>`,
+			expected: `<h1>ModelVisa</h1><p>ModelVisa API and cortex client</p><a href="https://modelvisa.com/">modelvisa.com</a><p>New API by QuantumNous</p>`,
 		},
 		{
 			name:     "normalized host",
 			host:     "MODELvisa.com.:443",
-			expected: `<h1>ModelVisa</h1><p>ModelVisa API and cortex client</p><p>New API by QuantumNous</p>`,
+			expected: `<h1>ModelVisa</h1><p>ModelVisa API and cortex client</p><a href="https://modelvisa.com/">modelvisa.com</a><p>New API by QuantumNous</p>`,
 		},
 		{
 			name:     "subdomain preserves canonical content",
