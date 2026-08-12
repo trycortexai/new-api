@@ -189,7 +189,14 @@ func oauthCallbackMatchesRequestHost(request *http.Request, callbackURI string) 
 		return false
 	}
 	requestOrigin, err := common.NormalizeOrigin(parsedCallback.Scheme + "://" + request.Host)
-	return err == nil && requestOrigin == callbackOrigin
+	if err != nil {
+		return false
+	}
+	if requestOrigin == callbackOrigin {
+		return true
+	}
+	canonicalOrigin, err := common.NormalizeOrigin(system_setting.ServerAddress)
+	return err == nil && requestOrigin == canonicalOrigin && isConfiguredOAuthOrigin(callbackOrigin)
 }
 
 func resolveOAuthCallbackURI(provider, requestedOrigin string) (string, error) {

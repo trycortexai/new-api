@@ -732,3 +732,18 @@ func TestOAuthCallbackRejectsCanonicalStateOnModelVisaHost(t *testing.T) {
 	assert.Zero(t, provider.exchangeCalls)
 	assert.Zero(t, provider.userInfoCalls)
 }
+
+func TestOAuthCallbackAllowsConfiguredAliasBehindCanonicalProxy(t *testing.T) {
+	previousAddress := system_setting.ServerAddress
+	previousTrustedURLs := common.SessionCookieTrustedURLs
+	system_setting.ServerAddress = "https://newapi.withcortex.ai"
+	common.SessionCookieTrustedURLs = []string{"https://newapicn.withcortex.ai"}
+	t.Cleanup(func() {
+		system_setting.ServerAddress = previousAddress
+		common.SessionCookieTrustedURLs = previousTrustedURLs
+	})
+
+	request := httptest.NewRequest(http.MethodGet, "/oauth/github", nil)
+	request.Host = "newapi.withcortex.ai"
+	assert.True(t, oauthCallbackMatchesRequestHost(request, "https://newapicn.withcortex.ai/oauth/github"))
+}
