@@ -56,6 +56,8 @@ func TestGetStatusAppliesModelVisaBrandOnlyToModelVisaHost(t *testing.T) {
 	previousLinuxDOOAuthEnabled := common.LinuxDOOAuthEnabled
 	previousTelegramOAuthEnabled := common.TelegramOAuthEnabled
 	previousWeChatAuthEnabled := common.WeChatAuthEnabled
+	passkeySetting := system_setting.GetPasskeySettings()
+	previousPasskeyEnabled := passkeySetting.Enabled
 	common.Footer = `<p>Cortex gateway</p><p>cortex remains lowercase</p><p>New API by QuantumNous</p>`
 	common.OptionMap = map[string]string{}
 	system_setting.ServerAddress = "https://newapi.withcortex.ai"
@@ -64,6 +66,7 @@ func TestGetStatusAppliesModelVisaBrandOnlyToModelVisaHost(t *testing.T) {
 	common.LinuxDOOAuthEnabled = true
 	common.TelegramOAuthEnabled = true
 	common.WeChatAuthEnabled = true
+	passkeySetting.Enabled = true
 	t.Cleanup(func() {
 		common.Footer = previousFooter
 		common.OptionMap = previousMap
@@ -73,6 +76,7 @@ func TestGetStatusAppliesModelVisaBrandOnlyToModelVisaHost(t *testing.T) {
 		common.LinuxDOOAuthEnabled = previousLinuxDOOAuthEnabled
 		common.TelegramOAuthEnabled = previousTelegramOAuthEnabled
 		common.WeChatAuthEnabled = previousWeChatAuthEnabled
+		passkeySetting.Enabled = previousPasskeyEnabled
 	})
 
 	tests := []struct {
@@ -165,9 +169,11 @@ func TestGetStatusAppliesModelVisaBrandOnlyToModelVisaHost(t *testing.T) {
 				assert.False(t, payload.Data["telegram_oauth"].(bool))
 				assert.False(t, payload.Data["wechat_login"].(bool))
 				assert.False(t, payload.Data["oidc_enabled"].(bool))
+				assert.False(t, payload.Data["passkey_login"].(bool))
 				assert.Empty(t, payload.Data["oauth_trusted_alias_providers"])
 			} else {
 				assert.True(t, payload.Data["github_oauth"].(bool))
+				assert.True(t, payload.Data["passkey_login"].(bool))
 				assert.Equal(t, []any{"github", "discord", "oidc"}, payload.Data["oauth_trusted_alias_providers"])
 			}
 		})

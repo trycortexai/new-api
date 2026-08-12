@@ -188,6 +188,7 @@ func GetStatus(c *gin.Context) {
 		data["telegram_oauth"] = false
 		data["wechat_login"] = false
 		data["oidc_enabled"] = false
+		data["passkey_login"] = false
 	}
 	data["oauth_canonical_origin"] = oauthCanonicalOrigin
 	data["session_cookie_secure"] = common.SessionCookieSecure
