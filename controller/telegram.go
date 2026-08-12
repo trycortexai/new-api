@@ -46,6 +46,10 @@ var (
 )
 
 func TelegramBindStart(c *gin.Context) {
+	if isModelVisaHost(c.Request.Host) {
+		common.ApiErrorMsg(c, "ModelVisa 暂不支持绑定 Telegram")
+		return
+	}
 	if !common.TelegramOAuthEnabled {
 		c.JSON(http.StatusOK, gin.H{
 			"message": "管理员未开启通过 Telegram 登录以及注册",
@@ -82,6 +86,10 @@ func TelegramBindStart(c *gin.Context) {
 }
 
 func TelegramBind(c *gin.Context) {
+	if isModelVisaHost(c.Request.Host) {
+		common.ApiErrorMsg(c, "ModelVisa 暂不支持绑定 Telegram")
+		return
+	}
 	if !common.TelegramOAuthEnabled {
 		telegramBindFailure(c, telegramBindErrorDisabled)
 		return
