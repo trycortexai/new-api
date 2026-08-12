@@ -193,6 +193,7 @@ func GetStatus(c *gin.Context) {
 		data["logo"] = modelVisaLogoURL
 		data["server_address"] = modelVisaServerAddress
 		data["footer_html"] = modelVisaContent(common.Footer)
+		data["docs_link"] = modelVisaContent(operation_setting.GetGeneralSetting().DocsLink)
 		data["github_oauth"] = false
 		data["discord_oauth"] = false
 		data["linuxdo_oauth"] = false

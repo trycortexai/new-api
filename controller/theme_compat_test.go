@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -64,6 +65,8 @@ func TestGetStatusAppliesModelVisaBrandOnlyToModelVisaHost(t *testing.T) {
 	previousLinuxDOOAuthEnabled := common.LinuxDOOAuthEnabled
 	previousTelegramOAuthEnabled := common.TelegramOAuthEnabled
 	previousWeChatAuthEnabled := common.WeChatAuthEnabled
+	generalSetting := operation_setting.GetGeneralSetting()
+	previousDocsLink := generalSetting.DocsLink
 	passkeySetting := system_setting.GetPasskeySettings()
 	previousPasskeyEnabled := passkeySetting.Enabled
 	common.Footer = `<p>Cortex gateway</p><a href="https://withcortex.ai/">withcortex.ai</a><p>cortex remains lowercase</p><p>New API by QuantumNous</p>`
@@ -74,6 +77,7 @@ func TestGetStatusAppliesModelVisaBrandOnlyToModelVisaHost(t *testing.T) {
 	common.LinuxDOOAuthEnabled = true
 	common.TelegramOAuthEnabled = true
 	common.WeChatAuthEnabled = true
+	generalSetting.DocsLink = "https://withcortex.ai/"
 	passkeySetting.Enabled = true
 	t.Cleanup(func() {
 		common.Footer = previousFooter
@@ -84,6 +88,7 @@ func TestGetStatusAppliesModelVisaBrandOnlyToModelVisaHost(t *testing.T) {
 		common.LinuxDOOAuthEnabled = previousLinuxDOOAuthEnabled
 		common.TelegramOAuthEnabled = previousTelegramOAuthEnabled
 		common.WeChatAuthEnabled = previousWeChatAuthEnabled
+		generalSetting.DocsLink = previousDocsLink
 		passkeySetting.Enabled = previousPasskeyEnabled
 	})
 
@@ -95,6 +100,7 @@ func TestGetStatusAppliesModelVisaBrandOnlyToModelVisaHost(t *testing.T) {
 		serverAddress string
 		footer        string
 		modelVisa     bool
+		docsLink      string
 	}{
 		{
 			name:          "exact host",
@@ -104,6 +110,7 @@ func TestGetStatusAppliesModelVisaBrandOnlyToModelVisaHost(t *testing.T) {
 			serverAddress: modelVisaServerAddress,
 			footer:        `<p>ModelVisa gateway</p><a href="https://modelvisa.com/">modelvisa.com</a><p>cortex remains lowercase</p><p>New API by QuantumNous</p>`,
 			modelVisa:     true,
+			docsLink:      "https://modelvisa.com/",
 		},
 		{
 			name:          "host with port",
@@ -113,6 +120,7 @@ func TestGetStatusAppliesModelVisaBrandOnlyToModelVisaHost(t *testing.T) {
 			serverAddress: modelVisaServerAddress,
 			footer:        `<p>ModelVisa gateway</p><a href="https://modelvisa.com/">modelvisa.com</a><p>cortex remains lowercase</p><p>New API by QuantumNous</p>`,
 			modelVisa:     true,
+			docsLink:      "https://modelvisa.com/",
 		},
 		{
 			name:          "case and trailing dot",
@@ -122,6 +130,7 @@ func TestGetStatusAppliesModelVisaBrandOnlyToModelVisaHost(t *testing.T) {
 			serverAddress: modelVisaServerAddress,
 			footer:        `<p>ModelVisa gateway</p><a href="https://modelvisa.com/">modelvisa.com</a><p>cortex remains lowercase</p><p>New API by QuantumNous</p>`,
 			modelVisa:     true,
+			docsLink:      "https://modelvisa.com/",
 		},
 		{
 			name:          "case trailing dot and port",
@@ -131,6 +140,7 @@ func TestGetStatusAppliesModelVisaBrandOnlyToModelVisaHost(t *testing.T) {
 			serverAddress: modelVisaServerAddress,
 			footer:        `<p>ModelVisa gateway</p><a href="https://modelvisa.com/">modelvisa.com</a><p>cortex remains lowercase</p><p>New API by QuantumNous</p>`,
 			modelVisa:     true,
+			docsLink:      "https://modelvisa.com/",
 		},
 		{
 			name:          "subdomain does not match",
@@ -139,6 +149,7 @@ func TestGetStatusAppliesModelVisaBrandOnlyToModelVisaHost(t *testing.T) {
 			logo:          common.Logo,
 			serverAddress: system_setting.ServerAddress,
 			footer:        common.Footer,
+			docsLink:      "https://withcortex.ai/",
 		},
 		{
 			name:          "different host does not match",
@@ -147,6 +158,7 @@ func TestGetStatusAppliesModelVisaBrandOnlyToModelVisaHost(t *testing.T) {
 			logo:          common.Logo,
 			serverAddress: system_setting.ServerAddress,
 			footer:        common.Footer,
+			docsLink:      "https://withcortex.ai/",
 		},
 	}
 
@@ -169,6 +181,7 @@ func TestGetStatusAppliesModelVisaBrandOnlyToModelVisaHost(t *testing.T) {
 			assert.Equal(t, tt.logo, payload.Data["logo"])
 			assert.Equal(t, tt.serverAddress, payload.Data["server_address"])
 			assert.Equal(t, tt.footer, payload.Data["footer_html"])
+			assert.Equal(t, tt.docsLink, payload.Data["docs_link"])
 			assert.True(t, payload.Data["password_login_enabled"].(bool))
 			if tt.modelVisa {
 				assert.False(t, payload.Data["github_oauth"].(bool))
