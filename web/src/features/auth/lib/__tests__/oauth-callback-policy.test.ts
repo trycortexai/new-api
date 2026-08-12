@@ -37,13 +37,10 @@ const providers: OAuthCallbackProvider[] = [
 describe('OAuth callback provider visibility', () => {
   test('offers every configured provider on the canonical origin', () => {
     const status: SystemStatus = {
-      oauth_canonical_origin: 'https://newapi.withcortex.ai',
+      oauth_canonical_origin: 'https://llmapi.withcortex.ai',
       session_cookie_secure: true,
       oauth_trusted_alias_providers: ['github', 'discord', 'oidc'],
-      oauth_trusted_origins: [
-        'https://llmapi.withcortex.ai',
-        'https://newapicn.withcortex.ai',
-      ],
+      oauth_trusted_origins: ['https://llmapicn.withcortex.ai'],
     }
 
     for (const provider of providers) {
@@ -51,7 +48,7 @@ describe('OAuth callback provider visibility', () => {
         isOAuthProviderAvailableAtOrigin(
           status,
           provider,
-          'https://newapi.withcortex.ai'
+          'https://llmapi.withcortex.ai'
         )
       ).toBe(true)
     }
@@ -59,13 +56,10 @@ describe('OAuth callback provider visibility', () => {
 
   test('offers only providers with checked alias callback support on HTTPS aliases', () => {
     const status: SystemStatus = {
-      oauth_canonical_origin: 'https://newapi.withcortex.ai',
+      oauth_canonical_origin: 'https://llmapi.withcortex.ai',
       session_cookie_secure: true,
       oauth_trusted_alias_providers: ['github', 'discord', 'oidc'],
-      oauth_trusted_origins: [
-        'https://llmapi.withcortex.ai',
-        'https://newapicn.withcortex.ai',
-      ],
+      oauth_trusted_origins: ['https://llmapicn.withcortex.ai'],
     }
 
     for (const provider of ['github', 'discord', 'oidc'] as const) {
@@ -73,7 +67,7 @@ describe('OAuth callback provider visibility', () => {
         isOAuthProviderAvailableAtOrigin(
           status,
           provider,
-          'https://llmapi.withcortex.ai'
+          'https://llmapicn.withcortex.ai'
         )
       ).toBe(true)
     }
@@ -82,7 +76,7 @@ describe('OAuth callback provider visibility', () => {
         isOAuthProviderAvailableAtOrigin(
           status,
           provider,
-          'https://llmapi.withcortex.ai'
+          'https://llmapicn.withcortex.ai'
         )
       ).toBe(false)
     }
@@ -111,7 +105,7 @@ describe('OAuth callback provider visibility', () => {
       session_cookie_secure: true,
     }
     const remoteHTTP: SystemStatus = {
-      oauth_canonical_origin: 'http://newapi.example.test',
+      oauth_canonical_origin: 'http://llmapi.example.test',
       session_cookie_secure: false,
     }
 
@@ -133,7 +127,7 @@ describe('OAuth callback provider visibility', () => {
 
   test('fails closed on an alias when the backend advertises no provider capability', () => {
     const status: SystemStatus = {
-      oauth_canonical_origin: 'https://newapi.withcortex.ai',
+      oauth_canonical_origin: 'https://llmapi.withcortex.ai',
       session_cookie_secure: true,
     }
 
@@ -141,17 +135,17 @@ describe('OAuth callback provider visibility', () => {
       isOAuthProviderAvailableAtOrigin(
         status,
         'github',
-        'https://llmapi.withcortex.ai'
+        'https://llmapicn.withcortex.ai'
       )
     ).toBe(false)
   })
 
   test('hides alias-capable providers on unlisted HTTPS origins', () => {
     const status: SystemStatus = {
-      oauth_canonical_origin: 'https://newapi.withcortex.ai',
+      oauth_canonical_origin: 'https://llmapi.withcortex.ai',
       session_cookie_secure: true,
       oauth_trusted_alias_providers: ['github', 'discord', 'oidc'],
-      oauth_trusted_origins: ['https://llmapi.withcortex.ai'],
+      oauth_trusted_origins: ['https://llmapicn.withcortex.ai'],
     }
 
     expect(

@@ -2,10 +2,8 @@ name: cortex-new-api-intl
 region: nyc
 
 domains:
-  - domain: newapi.withcortex.ai
-    type: PRIMARY
   - domain: llmapi.withcortex.ai
-    type: ALIAS
+    type: PRIMARY
 
 alerts:
   - rule: DEPLOYMENT_FAILED
@@ -22,8 +20,8 @@ services:
     source_dir: /
     dockerfile_path: Dockerfile
     http_port: 3000
-    instance_size_slug: apps-s-1vcpu-2gb
-    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-1gb
+    instance_count: 2
     health_check:
       initial_delay_seconds: 60
       period_seconds: 30
@@ -42,7 +40,7 @@ services:
         scope: RUN_TIME
         type: GENERAL
       - key: FRONTEND_BASE_URL
-        value: https://newapi.withcortex.ai
+        value: https://llmapi.withcortex.ai
         scope: RUN_TIME
         type: GENERAL
       - key: SESSION_COOKIE_SECURE
@@ -50,7 +48,7 @@ services:
         scope: RUN_TIME
         type: GENERAL
       - key: SESSION_COOKIE_TRUSTED_URL
-        value: https://newapi.withcortex.ai,https://llmapi.withcortex.ai,https://newapicn.withcortex.ai
+        value: https://llmapi.withcortex.ai,https://llmapicn.withcortex.ai
         scope: RUN_TIME
         type: GENERAL
       - key: TZ

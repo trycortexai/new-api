@@ -106,11 +106,10 @@ func TestGenerateOAuthCodeBindsAnExactAllowedCallbackURI(t *testing.T) {
 	oauth.RegisterCustom("auth-flow-custom", provider)
 	previousAddress := system_setting.ServerAddress
 	previousTrustedURLs := common.SessionCookieTrustedURLs
-	system_setting.ServerAddress = "https://newapi.withcortex.ai/"
+	system_setting.ServerAddress = "https://llmapi.withcortex.ai/"
 	common.SessionCookieTrustedURLs = []string{
-		"https://newapi.withcortex.ai",
 		"https://llmapi.withcortex.ai",
-		"https://newapicn.withcortex.ai",
+		"https://llmapicn.withcortex.ai",
 	}
 	t.Cleanup(func() {
 		oauth.UnregisterCustomProvider("auth-flow-custom")
@@ -127,31 +126,31 @@ func TestGenerateOAuthCodeBindsAnExactAllowedCallbackURI(t *testing.T) {
 		{
 			name:           "canonical origin",
 			provider:       "auth-flow-custom",
-			redirectOrigin: "https://newapi.withcortex.ai",
-			wantCallback:   "https://newapi.withcortex.ai/oauth/auth-flow-custom",
+			redirectOrigin: "https://llmapi.withcortex.ai",
+			wantCallback:   "https://llmapi.withcortex.ai/oauth/auth-flow-custom",
 		},
 		{
 			name:           "GitHub trusted alias origin",
 			provider:       "github",
-			redirectOrigin: "https://llmapi.withcortex.ai",
-			wantCallback:   "https://llmapi.withcortex.ai/oauth/github",
+			redirectOrigin: "https://llmapicn.withcortex.ai",
+			wantCallback:   "https://llmapicn.withcortex.ai/oauth/github",
 		},
 		{
 			name:           "Discord trusted alias origin",
 			provider:       "discord",
-			redirectOrigin: "https://newapicn.withcortex.ai",
-			wantCallback:   "https://newapicn.withcortex.ai/oauth/discord",
+			redirectOrigin: "https://llmapicn.withcortex.ai",
+			wantCallback:   "https://llmapicn.withcortex.ai/oauth/discord",
 		},
 		{
 			name:           "OIDC trusted alias origin",
 			provider:       "oidc",
-			redirectOrigin: "https://llmapi.withcortex.ai",
-			wantCallback:   "https://llmapi.withcortex.ai/oauth/oidc",
+			redirectOrigin: "https://llmapicn.withcortex.ai",
+			wantCallback:   "https://llmapicn.withcortex.ai/oauth/oidc",
 		},
 		{
 			name:         "missing origin falls back to canonical",
 			provider:     "auth-flow-test",
-			wantCallback: "https://newapi.withcortex.ai/oauth/auth-flow-test",
+			wantCallback: "https://llmapi.withcortex.ai/oauth/auth-flow-test",
 		},
 	}
 
@@ -196,8 +195,8 @@ func TestGenerateOAuthCodeRejectsCanonicalOnlyProvidersOnTrustedAliases(t *testi
 	oauth.RegisterCustom("auth-flow-custom", provider)
 	previousAddress := system_setting.ServerAddress
 	previousTrustedURLs := common.SessionCookieTrustedURLs
-	system_setting.ServerAddress = "https://newapi.withcortex.ai"
-	common.SessionCookieTrustedURLs = []string{"https://llmapi.withcortex.ai"}
+	system_setting.ServerAddress = "https://llmapi.withcortex.ai"
+	common.SessionCookieTrustedURLs = []string{"https://llmapicn.withcortex.ai"}
 	t.Cleanup(func() {
 		oauth.UnregisterCustomProvider("auth-flow-custom")
 		system_setting.ServerAddress = previousAddress
@@ -208,7 +207,7 @@ func TestGenerateOAuthCodeRejectsCanonicalOnlyProvidersOnTrustedAliases(t *testi
 		t.Run(provider, func(t *testing.T) {
 			recorder := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(recorder)
-			body := fmt.Sprintf(`{"provider":%q,"intent":"login","redirect_origin":"https://llmapi.withcortex.ai"}`, provider)
+			body := fmt.Sprintf(`{"provider":%q,"intent":"login","redirect_origin":"https://llmapicn.withcortex.ai"}`, provider)
 			c.Request = httptest.NewRequest(http.MethodPost, "/api/oauth/state", strings.NewReader(body))
 			c.Request.Header.Set("Content-Type", "application/json")
 
@@ -223,8 +222,8 @@ func TestGenerateOAuthCodeRejectsUntrustedCallbackOrigins(t *testing.T) {
 	setupAuthFlowControllerTest(t)
 	previousAddress := system_setting.ServerAddress
 	previousTrustedURLs := common.SessionCookieTrustedURLs
-	system_setting.ServerAddress = "https://newapi.withcortex.ai"
-	common.SessionCookieTrustedURLs = []string{"https://llmapi.withcortex.ai"}
+	system_setting.ServerAddress = "https://llmapi.withcortex.ai"
+	common.SessionCookieTrustedURLs = []string{"https://llmapicn.withcortex.ai"}
 	t.Cleanup(func() {
 		system_setting.ServerAddress = previousAddress
 		common.SessionCookieTrustedURLs = previousTrustedURLs
@@ -234,9 +233,9 @@ func TestGenerateOAuthCodeRejectsUntrustedCallbackOrigins(t *testing.T) {
 		name   string
 		origin string
 	}{
-		{name: "suffix attack", origin: "https://llmapi.withcortex.ai.evil.test"},
-		{name: "scheme downgrade", origin: "http://llmapi.withcortex.ai"},
-		{name: "path-bearing URL", origin: "https://llmapi.withcortex.ai/callback"},
+		{name: "suffix attack", origin: "https://llmapicn.withcortex.ai.evil.test"},
+		{name: "scheme downgrade", origin: "http://llmapicn.withcortex.ai"},
+		{name: "path-bearing URL", origin: "https://llmapicn.withcortex.ai/callback"},
 		{name: "unlisted origin", origin: "https://unlisted.withcortex.ai"},
 	}
 
@@ -400,7 +399,7 @@ func TestGenerateOAuthCodeRejectsUnsafeDevelopmentCallbackOrigins(t *testing.T) 
 		},
 		{
 			name:           "non-loopback canonical origin",
-			serverAddress:  "https://newapi.withcortex.ai",
+			serverAddress:  "https://llmapi.withcortex.ai",
 			redirectOrigin: "http://localhost:5173",
 			browserOrigin:  "http://localhost:5173",
 		},
@@ -513,8 +512,8 @@ func TestOAuthExchangeUsesTheStateBoundCallbackURI(t *testing.T) {
 	oauth.Register("github", provider)
 	previousAddress := system_setting.ServerAddress
 	previousTrustedURLs := common.SessionCookieTrustedURLs
-	system_setting.ServerAddress = "https://newapi.withcortex.ai"
-	common.SessionCookieTrustedURLs = []string{"https://llmapi.withcortex.ai"}
+	system_setting.ServerAddress = "https://llmapi.withcortex.ai"
+	common.SessionCookieTrustedURLs = []string{"https://llmapicn.withcortex.ai"}
 	t.Cleanup(func() {
 		oauth.Register("github", previousGitHubProvider)
 		system_setting.ServerAddress = previousAddress
@@ -525,7 +524,7 @@ func TestOAuthExchangeUsesTheStateBoundCallbackURI(t *testing.T) {
 		Purpose:   model.AuthFlowPurposeOAuth,
 		Provider:  "github",
 		Intent:    model.AuthFlowIntentLogin,
-		Payload:   `{"redirect_uri":"https://llmapi.withcortex.ai/oauth/github"}`,
+		Payload:   `{"redirect_uri":"https://llmapicn.withcortex.ai/oauth/github"}`,
 		ExpiresAt: time.Now().Add(time.Minute),
 	})
 	require.NoError(t, err)
@@ -537,7 +536,7 @@ func TestOAuthExchangeUsesTheStateBoundCallbackURI(t *testing.T) {
 	router.ServeHTTP(response, request)
 
 	assert.Equal(t, 1, provider.exchangeCalls)
-	assert.Equal(t, "https://llmapi.withcortex.ai/oauth/github", provider.exchangedRedirectURI)
+	assert.Equal(t, "https://llmapicn.withcortex.ai/oauth/github", provider.exchangedRedirectURI)
 }
 
 func TestOAuthExchangeUsesTheStateBoundInsecureLoopbackCallbackURI(t *testing.T) {

@@ -64,13 +64,12 @@ func TestGetStatusAdvertisesNormalizedOAuthCallbackPolicy(t *testing.T) {
 	previousSecure := common.SessionCookieSecure
 	previousTrustedURLs := common.SessionCookieTrustedURLs
 	previousOptionMap := common.OptionMap
-	system_setting.ServerAddress = "https://NEWAPI.withcortex.ai/"
+	system_setting.ServerAddress = "https://LLMAPI.withcortex.ai/"
 	common.SessionCookieSecure = true
 	common.SessionCookieTrustedURLs = []string{
-		"https://LLMAPI.withcortex.ai/",
-		"https://newapicn.withcortex.ai",
+		"https://LLMAPICN.withcortex.ai/",
+		"https://llmapicn.withcortex.ai",
 		"https://llmapi.withcortex.ai",
-		"https://newapi.withcortex.ai",
 	}
 	common.OptionMap = map[string]string{}
 	t.Cleanup(func() {
@@ -97,8 +96,8 @@ func TestGetStatusAdvertisesNormalizedOAuthCallbackPolicy(t *testing.T) {
 	}
 	require.NoError(t, common.Unmarshal(response.Body.Bytes(), &payload))
 	require.True(t, payload.Success)
-	assert.Equal(t, "https://newapi.withcortex.ai", payload.Data.CanonicalOrigin)
-	assert.Equal(t, []string{"https://llmapi.withcortex.ai", "https://newapicn.withcortex.ai"}, payload.Data.TrustedOrigins)
+	assert.Equal(t, "https://llmapi.withcortex.ai", payload.Data.CanonicalOrigin)
+	assert.Equal(t, []string{"https://llmapicn.withcortex.ai"}, payload.Data.TrustedOrigins)
 	assert.Equal(t, []string{"github", "discord", "oidc"}, payload.Data.TrustedAliasProviders)
 	assert.True(t, payload.Data.SessionCookieSecure)
 }

@@ -1,7 +1,7 @@
 {
   "SystemName": "Cortex API",
-  "Logo": "https://newapi.withcortex.ai/cortex-logo.svg",
-  "ServerAddress": "https://newapi.withcortex.ai",
+  "Logo": "https://llmapi.withcortex.ai/cortex-logo.svg",
+  "ServerAddress": "https://llmapi.withcortex.ai",
   "HomePageContent": "## Cortex API\n\nA Cortex-operated AI model gateway. Visit [withcortex.ai](https://withcortex.ai/) for product information and documentation.",
   "Footer": "<span>© 2026 <a href=\"https://withcortex.ai/\" target=\"_blank\" rel=\"noopener noreferrer\">Cortex AI</a> · Powered by <a href=\"https://github.com/QuantumNous/new-api\" target=\"_blank\" rel=\"noopener noreferrer\">New API</a> by QuantumNous</span>",
   "general_setting.docs_link": "https://withcortex.ai/",
