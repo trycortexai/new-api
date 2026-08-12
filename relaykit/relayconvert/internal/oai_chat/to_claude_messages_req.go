@@ -261,7 +261,7 @@ func OpenAIChatRequestToClaudeMessages(c context.Context, info convmeta.Meta, te
 	var systemMessages []dto.ClaudeMediaMessage
 
 	for _, message := range formatMessages {
-		if message.Role == "system" {
+		if message.Role == "system" || message.Role == "developer" {
 			if message.IsStringContent() {
 				if text := message.StringContent(); text != "" {
 					systemMessages = append(systemMessages, dto.ClaudeMediaMessage{
