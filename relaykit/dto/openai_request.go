@@ -587,10 +587,16 @@ func (m *Message) ParseContent() []MediaContent {
 		switch contentType {
 		case ContentTypeText:
 			if text, ok := contentItem["text"].(string); ok {
-				contentList = append(contentList, MediaContent{
+				mediaContent := MediaContent{
 					Type: ContentTypeText,
 					Text: text,
-				})
+				}
+				if cacheControl, exists := contentItem["cache_control"]; exists {
+					if rawCacheControl, err := kitutil.Marshal(cacheControl); err == nil {
+						mediaContent.CacheControl = rawCacheControl
+					}
+				}
+				contentList = append(contentList, mediaContent)
 			}
 
 		case ContentTypeImageURL:

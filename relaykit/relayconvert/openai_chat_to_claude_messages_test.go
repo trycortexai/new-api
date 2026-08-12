@@ -60,25 +60,18 @@ func TestOpenAIChatRequestToClaudeMessagesPreservesSystemAndDeveloperInstruction
 }
 
 func TestOpenAIChatRequestToClaudeMessagesPreservesCacheStableInstructionPrefix(t *testing.T) {
-	maxTokens := uint(64)
-	cacheControl := []byte(`{"type":"ephemeral"}`)
-	prefixes := []string{"Stable developer instruction.", "Stable developer instruction.", "Changed developer instruction."}
-	serializedSystems := make([][]byte, 0, len(prefixes))
+	requests := []string{
+		`{"model":"claude-test","max_tokens":64,"messages":[{"role":"system","content":[{"type":"text","text":"Stable system instruction.","cache_control":{"type":"ephemeral"}}]},{"role":"developer","content":[{"type":"text","text":"Stable developer instruction.","cache_control":{"type":"ephemeral"}}]},{"role":"user","content":"echo hi"}]}`,
+		`{"model":"claude-test","max_tokens":64,"messages":[{"role":"system","content":[{"type":"text","text":"Stable system instruction.","cache_control":{"type":"ephemeral"}}]},{"role":"developer","content":[{"type":"text","text":"Stable developer instruction.","cache_control":{"type":"ephemeral"}}]},{"role":"user","content":"echo hi"}]}`,
+		`{"model":"claude-test","max_tokens":64,"messages":[{"role":"system","content":[{"type":"text","text":"Stable system instruction.","cache_control":{"type":"ephemeral"}}]},{"role":"developer","content":[{"type":"text","text":"Changed developer instruction.","cache_control":{"type":"ephemeral"}}]},{"role":"user","content":"echo hi"}]}`,
+	}
+	serializedSystems := make([][]byte, 0, len(requests))
 
-	for _, prefix := range prefixes {
-		got, err := OpenAIChatRequestToClaudeMessages(context.Background(), &convmeta.Values{}, dto.GeneralOpenAIRequest{
-			Model:     "claude-test",
-			MaxTokens: &maxTokens,
-			Messages: []dto.Message{
-				{Role: "system", Content: []any{
-					dto.MediaContent{Type: "text", Text: "Stable system instruction.", CacheControl: cacheControl},
-				}},
-				{Role: "developer", Content: []any{
-					dto.MediaContent{Type: "text", Text: prefix, CacheControl: cacheControl},
-				}},
-				{Role: "user", Content: "echo hi"},
-			},
-		})
+	for _, requestJSON := range requests {
+		var request dto.GeneralOpenAIRequest
+		require.NoError(t, kitutil.Unmarshal([]byte(requestJSON), &request))
+
+		got, err := OpenAIChatRequestToClaudeMessages(context.Background(), &convmeta.Values{}, request)
 		require.NoError(t, err)
 
 		serializedSystem, err := kitutil.Marshal(got.System)
