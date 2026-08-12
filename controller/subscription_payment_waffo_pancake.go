@@ -21,6 +21,10 @@ type SubscriptionWaffoPancakePayRequest struct {
 }
 
 func SubscriptionRequestWaffoPancakePay(c *gin.Context) {
+	if !isPaymentMethodAvailableForHost(c.Request.Host, model.PaymentMethodWaffoPancake) {
+		common.ApiErrorMsg(c, "ModelVisa 暂不支持 Waffo Pancake 支付")
+		return
+	}
 	if !requirePaymentCompliance(c) {
 		return
 	}

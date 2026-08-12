@@ -52,6 +52,10 @@ func getWeChatIdByCode(code string) (string, error) {
 }
 
 func WeChatAuth(c *gin.Context) {
+	if isModelVisaHost(c.Request.Host) {
+		common.ApiErrorMsg(c, "ModelVisa 暂不支持微信登录")
+		return
+	}
 	if !common.WeChatAuthEnabled {
 		c.JSON(http.StatusOK, gin.H{
 			"message": "管理员未开启通过微信登录以及注册",
@@ -125,6 +129,10 @@ type wechatBindRequest struct {
 }
 
 func WeChatBind(c *gin.Context) {
+	if isModelVisaHost(c.Request.Host) {
+		common.ApiErrorMsg(c, "ModelVisa 暂不支持绑定微信")
+		return
+	}
 	if !common.WeChatAuthEnabled {
 		c.JSON(http.StatusOK, gin.H{
 			"message": "管理员未开启通过微信登录以及注册",

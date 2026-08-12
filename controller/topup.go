@@ -23,9 +23,10 @@ import (
 
 func GetTopUpInfo(c *gin.Context) {
 	complianceConfirmed := operation_setting.IsPaymentComplianceConfirmed()
+	requestHost := c.Request.Host
 
 	// 获取支付方式
-	payMethods := operation_setting.PayMethods
+	payMethods := append([]map[string]string(nil), operation_setting.PayMethods...)
 	if !complianceConfirmed {
 		payMethods = []map[string]string{}
 	}
@@ -53,7 +54,7 @@ func GetTopUpInfo(c *gin.Context) {
 	}
 
 	// Waffo Pancake is displayed above the standard Waffo gateway.
-	enableWaffoPancake := isWaffoPancakeTopUpEnabled()
+	enableWaffoPancake := isWaffoPancakeTopUpEnabled() && isPaymentMethodAvailableForHost(requestHost, model.PaymentMethodWaffoPancake)
 	if enableWaffoPancake {
 		hasWaffoPancake := false
 		for _, method := range payMethods {
@@ -94,11 +95,15 @@ func GetTopUpInfo(c *gin.Context) {
 			payMethods = append(payMethods, waffoMethod)
 		}
 	}
+	payMethods = lo.Filter(payMethods, func(method map[string]string, _ int) bool {
+		return isPaymentMethodAvailableForHost(requestHost, method["type"])
+	})
+	enableCreem := isCreemTopUpEnabled() && isPaymentMethodAvailableForHost(requestHost, model.PaymentMethodCreem)
 
 	data := gin.H{
 		"enable_online_topup":              isEpayTopUpEnabled(),
 		"enable_stripe_topup":              isStripeTopUpEnabled(),
-		"enable_creem_topup":               isCreemTopUpEnabled(),
+		"enable_creem_topup":               enableCreem,
 		"enable_waffo_topup":               enableWaffo,
 		"enable_waffo_pancake_topup":       enableWaffoPancake,
 		"enable_redemption":                complianceConfirmed,
@@ -110,7 +115,12 @@ func GetTopUpInfo(c *gin.Context) {
 			}
 			return nil
 		}(),
-		"creem_products":          setting.CreemProducts,
+		"creem_products": func() string {
+			if enableCreem {
+				return setting.CreemProducts
+			}
+			return "[]"
+		}(),
 		"pay_methods":             payMethods,
 		"min_topup":               operation_setting.MinTopUp,
 		"stripe_min_topup":        setting.StripeMinTopUp,
@@ -216,7 +226,7 @@ func RequestEpay(c *gin.Context) {
 	}
 
 	callBackAddress := service.GetCallbackAddress()
-	returnUrl, _ := url.Parse(paymentReturnPath("/usage-logs"))
+	returnUrl, _ := url.Parse(paymentReturnPathForHost(c.Request.Host, "/usage-logs"))
 	notifyUrl, _ := url.Parse(callBackAddress + "/api/user/epay/notify")
 	tradeNo := fmt.Sprintf("%s%d", common.GetRandomString(6), time.Now().Unix())
 	tradeNo = fmt.Sprintf("USR%dNO%s", id, tradeNo)

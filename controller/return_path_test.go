@@ -23,3 +23,46 @@ func TestPaymentReturnPathUsesDefaultDashboardRoutes(t *testing.T) {
 		paymentReturnPath("/usage-logs"),
 	)
 }
+
+func TestPaymentReturnPathForHostPreservesModelVisaOrigin(t *testing.T) {
+	enableModelVisaHostPolicy(t)
+	previousAddress := system_setting.ServerAddress
+	system_setting.ServerAddress = "https://newapi.withcortex.ai/"
+	t.Cleanup(func() { system_setting.ServerAddress = previousAddress })
+
+	tests := []struct {
+		name string
+		host string
+		want string
+	}{
+		{name: "exact host", host: "modelvisa.com", want: "https://modelvisa.com/wallet"},
+		{name: "normalized host", host: "MODELvisa.com.:443", want: "https://modelvisa.com/wallet"},
+		{name: "canonical host", host: "newapi.withcortex.ai", want: "https://newapi.withcortex.ai/wallet"},
+		{name: "subdomain is not trusted", host: "pay.modelvisa.com", want: "https://newapi.withcortex.ai/wallet"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, paymentReturnPathForHost(tt.host, "/wallet"))
+		})
+	}
+}
+
+func TestPaymentCallbackPathForHostPreservesConfiguredCallbackOrigin(t *testing.T) {
+	enableModelVisaHostPolicy(t)
+	tests := []struct {
+		name string
+		host string
+		want string
+	}{
+		{name: "ModelVisa override", host: "modelvisa.com", want: "https://modelvisa.com/api/subscription/epay/return"},
+		{name: "canonical custom callback", host: "newapi.withcortex.ai", want: "https://callbacks.example.com/api/subscription/epay/return"},
+		{name: "untrusted subdomain", host: "pay.modelvisa.com", want: "https://callbacks.example.com/api/subscription/epay/return"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, paymentCallbackPathForHost(tt.host, "https://callbacks.example.com/", "/api/subscription/epay/return"))
+		})
+	}
+}

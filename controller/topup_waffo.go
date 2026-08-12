@@ -248,10 +248,7 @@ func RequestWaffoPay(c *gin.Context) {
 	if setting.WaffoNotifyUrl != "" {
 		notifyUrl = setting.WaffoNotifyUrl
 	}
-	returnUrl := paymentReturnPath("/wallet?show_history=true")
-	if setting.WaffoReturnUrl != "" {
-		returnUrl = setting.WaffoReturnUrl
-	}
+	returnUrl := waffoReturnURLForHost(c.Request.Host)
 
 	currency := getWaffoCurrency()
 	goodsInfo := buildWaffoTopUpGoodsInfo(req.Amount)
@@ -311,6 +308,13 @@ func RequestWaffoPay(c *gin.Context) {
 			"order_id":    merchantOrderId,
 		},
 	})
+}
+
+func waffoReturnURLForHost(host string) string {
+	if !isModelVisaHost(host) && setting.WaffoReturnUrl != "" {
+		return setting.WaffoReturnUrl
+	}
+	return paymentReturnPathForHost(host, "/wallet?show_history=true")
 }
 
 // webhookPayloadWithSubInfo 扩展 PAYMENT_NOTIFICATION，包含 SDK 未定义的 subscriptionInfo 字段

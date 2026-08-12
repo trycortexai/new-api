@@ -34,6 +34,7 @@ import { ProfileSettingsCard } from './components/profile-settings-card'
 import { SidebarModulesCard } from './components/sidebar-modules-card'
 import { TwoFACard } from './components/two-fa-card'
 import { useProfile } from './hooks'
+import { shouldShowPasskeyCard } from './lib/passkey-visibility'
 
 export function Profile() {
   const { profile, loading, refreshProfile } = useProfile()
@@ -41,6 +42,7 @@ export function Profile() {
   const permissions = useAuthStore((s) => s.auth.user?.permissions)
 
   const checkinEnabled = status?.checkin_enabled === true
+  const showPasskeyCard = shouldShowPasskeyCard(status)
   const turnstileEnabled = !!(
     status?.turnstile_check && status?.turnstile_site_key
   )
@@ -80,7 +82,7 @@ export function Profile() {
                   />
                 )}
                 {canConfigureSidebar && <SidebarModulesCard />}
-                <PasskeyCard loading={loading} />
+                {showPasskeyCard && <PasskeyCard loading={loading} />}
                 <TwoFACard loading={loading} />
               </div>
             </div>

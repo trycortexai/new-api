@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"strings"
 
@@ -21,6 +22,67 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+const (
+	modelVisaHost          = "modelvisa.com"
+	modelVisaName          = "ModelVisa"
+	modelVisaLogoURL       = "/modelvisa-logo.svg"
+	modelVisaServerAddress = "https://modelvisa.com"
+)
+
+func isModelVisaHost(host string) bool {
+	host = strings.TrimSpace(host)
+	if hostname, _, err := net.SplitHostPort(host); err == nil {
+		host = hostname
+	}
+	host = strings.TrimSuffix(host, ".")
+	if !strings.EqualFold(host, modelVisaHost) {
+		return false
+	}
+	for _, trustedOrigin := range common.SessionCookieTrustedURLs {
+		normalizedOrigin, err := common.NormalizeOrigin(trustedOrigin)
+		if err == nil && normalizedOrigin == modelVisaServerAddress {
+			return true
+		}
+	}
+	return false
+}
+
+func modelVisaContent(content string) string {
+	content = strings.ReplaceAll(content, "https://withcortex.ai/", modelVisaServerAddress+"/")
+	content = strings.ReplaceAll(content, "withcortex.ai", modelVisaHost)
+	return strings.ReplaceAll(content, "Cortex", modelVisaName)
+}
+
+type accountEmailBrand struct {
+	Name          string
+	ServerAddress string
+}
+
+func accountEmailBrandForHost(host string) accountEmailBrand {
+	if isModelVisaHost(host) {
+		return accountEmailBrand{Name: modelVisaName, ServerAddress: modelVisaServerAddress}
+	}
+	return accountEmailBrand{Name: common.SystemName, ServerAddress: system_setting.ServerAddress}
+}
+
+func buildVerificationEmail(brand accountEmailBrand, code string) (string, string) {
+	subject := fmt.Sprintf("%s邮箱验证邮件", brand.Name)
+	content := fmt.Sprintf("<p>您好，你正在进行%s邮箱验证。</p>"+
+		"<p>您的验证码为: <strong>%s</strong></p>"+
+		"<p>验证码 %d 分钟内有效，如果不是本人操作，请忽略。</p>", brand.Name, code, common.VerificationValidMinutes)
+	return subject, content
+}
+
+func buildPasswordResetEmail(brand accountEmailBrand, email, code string) (string, string) {
+	link := fmt.Sprintf("%s/user/reset?email=%s&token=%s", brand.ServerAddress, email, code)
+	subject := fmt.Sprintf("%s密码重置", brand.Name)
+	content := fmt.Sprintf("<p>您好，你正在进行%s密码重置。</p>"+
+		"<p>点击 <a href='%s'>此处</a> 进行密码重置。</p>"+
+		"<p>如果链接无法点击，请尝试点击下面的链接或将其复制到浏览器中打开：<br> %s </p>"+
+		"<p>重置链接 %d 分钟内有效，如果不是本人操作，请忽略。</p>", brand.Name, link, link, common.VerificationValidMinutes)
+	return subject, content
+}
 
 func TestStatus(c *gin.Context) {
 	err := model.PingDB()
@@ -125,9 +187,24 @@ func GetStatus(c *gin.Context) {
 		"privacy_policy_enabled":      legalSetting.PrivacyPolicy != "",
 		"checkin_enabled":             operation_setting.GetCheckinSetting().Enabled,
 	}
+	isModelVisa := isModelVisaHost(c.Request.Host)
+	if isModelVisa {
+		data["system_name"] = modelVisaName
+		data["logo"] = modelVisaLogoURL
+		data["server_address"] = modelVisaServerAddress
+		data["footer_html"] = modelVisaContent(common.Footer)
+		data["docs_link"] = modelVisaContent(operation_setting.GetGeneralSetting().DocsLink)
+		data["github_oauth"] = false
+		data["discord_oauth"] = false
+		data["linuxdo_oauth"] = false
+		data["telegram_oauth"] = false
+		data["wechat_login"] = false
+		data["oidc_enabled"] = false
+		data["passkey_login"] = false
+	}
 	data["oauth_canonical_origin"] = oauthCanonicalOrigin
 	data["session_cookie_secure"] = common.SessionCookieSecure
-	data["oauth_trusted_alias_providers"] = append([]string(nil), oauthTrustedAliasProviders...)
+	data["oauth_trusted_alias_providers"] = append([]string{}, oauthTrustedAliasProvidersForHost(c.Request.Host)...)
 	data["oauth_trusted_origins"] = oauthConfiguredTrustedOrigins()
 
 	// 根据启用状态注入可选内容
@@ -143,6 +220,9 @@ func GetStatus(c *gin.Context) {
 
 	// Add enabled custom OAuth providers
 	customProviders := oauth.GetEnabledCustomProviders()
+	if isModelVisa {
+		customProviders = nil
+	}
 	if len(customProviders) > 0 {
 		type CustomOAuthInfo struct {
 			Id                    int    `json:"id"`
@@ -231,10 +311,14 @@ func GetMidjourney(c *gin.Context) {
 func GetHomePageContent(c *gin.Context) {
 	common.OptionMapRWMutex.RLock()
 	defer common.OptionMapRWMutex.RUnlock()
+	homePageContent := common.OptionMap["HomePageContent"]
+	if isModelVisaHost(c.Request.Host) {
+		homePageContent = modelVisaContent(homePageContent)
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    common.OptionMap["HomePageContent"],
+		"data":    homePageContent,
 	})
 	return
 }
@@ -288,10 +372,7 @@ func SendEmailVerification(c *gin.Context) {
 	}
 	code := common.GenerateVerificationCode(6)
 	common.RegisterVerificationCodeWithKey(email, code, common.EmailVerificationPurpose)
-	subject := fmt.Sprintf("%s邮箱验证邮件", common.SystemName)
-	content := fmt.Sprintf("<p>您好，你正在进行%s邮箱验证。</p>"+
-		"<p>您的验证码为: <strong>%s</strong></p>"+
-		"<p>验证码 %d 分钟内有效，如果不是本人操作，请忽略。</p>", common.SystemName, code, common.VerificationValidMinutes)
+	subject, content := buildVerificationEmail(accountEmailBrandForHost(c.Request.Host), code)
 	err := common.SendEmail(subject, email, content)
 	if err != nil {
 		common.ApiError(c, err)
@@ -313,12 +394,7 @@ func SendPasswordResetEmail(c *gin.Context) {
 	if _, err := model.GetUniqueUserByEmail(email); err == nil {
 		code := common.GenerateVerificationCode(0)
 		common.RegisterVerificationCodeWithKey(email, code, common.PasswordResetPurpose)
-		link := fmt.Sprintf("%s/user/reset?email=%s&token=%s", system_setting.ServerAddress, email, code)
-		subject := fmt.Sprintf("%s密码重置", common.SystemName)
-		content := fmt.Sprintf("<p>您好，你正在进行%s密码重置。</p>"+
-			"<p>点击 <a href='%s'>此处</a> 进行密码重置。</p>"+
-			"<p>如果链接无法点击，请尝试点击下面的链接或将其复制到浏览器中打开：<br> %s </p>"+
-			"<p>重置链接 %d 分钟内有效，如果不是本人操作，请忽略。</p>", common.SystemName, link, link, common.VerificationValidMinutes)
+		subject, content := buildPasswordResetEmail(accountEmailBrandForHost(c.Request.Host), email, code)
 		err := common.SendEmail(subject, email, content)
 		if err != nil {
 			logger.LogError(c.Request.Context(), fmt.Sprintf("failed to send password reset email to %s: %s", email, err.Error()))

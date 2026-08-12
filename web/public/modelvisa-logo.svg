@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">ModelVisa</title>
+  <defs>
+    <linearGradient id="modelvisa-gradient" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2563eb"/>
+      <stop offset="1" stop-color="#7c3aed"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="url(#modelvisa-gradient)"/>
+  <path d="M16 23.5C16 18.25 20.25 14 25.5 14h13C43.75 14 48 18.25 48 23.5v17C48 45.75 43.75 50 38.5 50h-13C20.25 50 16 45.75 16 40.5z" fill="#fff" fill-opacity=".18"/>
+  <path d="m21 33 7 7 15-17" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="5"/>
+</svg>

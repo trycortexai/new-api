@@ -3,9 +3,17 @@ package controller
 import (
 	"strings"
 
+	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 )
+
+func isPaymentMethodAvailableForHost(host, paymentMethod string) bool {
+	if !isModelVisaHost(host) {
+		return true
+	}
+	return paymentMethod != model.PaymentMethodCreem && paymentMethod != model.PaymentMethodWaffoPancake
+}
 
 func isPaymentComplianceConfirmed() bool {
 	return operation_setting.IsPaymentComplianceConfirmed()

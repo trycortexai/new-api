@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -21,6 +22,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
+
+func setOAuthCallbackRequestHost(t *testing.T, request *http.Request, callbackBase string) {
+	t.Helper()
+	parsed, err := url.Parse(callbackBase)
+	require.NoError(t, err)
+	request.Host = parsed.Host
+}
 
 type authFlowTestOAuthProvider struct {
 	exchangeErr          error
@@ -215,6 +223,61 @@ func TestGenerateOAuthCodeRejectsCanonicalOnlyProvidersOnTrustedAliases(t *testi
 			GenerateOAuthCode(c)
 
 			assert.Equal(t, http.StatusBadRequest, recorder.Code)
+		})
+	}
+}
+
+func TestGenerateOAuthCodeRejectsProvidersOnModelVisaAlias(t *testing.T) {
+	setupAuthFlowControllerTest(t)
+	previousAddress := system_setting.ServerAddress
+	previousTrustedURLs := common.SessionCookieTrustedURLs
+	system_setting.ServerAddress = "https://newapi.withcortex.ai"
+	common.SessionCookieTrustedURLs = []string{
+		"https://llmapi.withcortex.ai",
+		modelVisaServerAddress,
+	}
+	t.Cleanup(func() {
+		system_setting.ServerAddress = previousAddress
+		common.SessionCookieTrustedURLs = previousTrustedURLs
+	})
+
+	tests := []struct {
+		name           string
+		redirectOrigin string
+		wantStatus     int
+	}{
+		{
+			name:           "existing trusted alias remains allowed",
+			redirectOrigin: "https://llmapi.withcortex.ai",
+			wantStatus:     http.StatusOK,
+		},
+		{
+			name:           "ModelVisa alias rejects GitHub",
+			redirectOrigin: modelVisaServerAddress,
+			wantStatus:     http.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			body := fmt.Sprintf(`{"provider":"github","intent":"login","redirect_origin":%q}`, tt.redirectOrigin)
+			c.Request = httptest.NewRequest(http.MethodPost, "/api/oauth/state", strings.NewReader(body))
+			c.Request.Header.Set("Content-Type", "application/json")
+
+			GenerateOAuthCode(c)
+
+			assert.Equal(t, tt.wantStatus, recorder.Code)
+			callbackURI := tt.redirectOrigin + "/oauth/github"
+			validatedCallback, err := validateOAuthCallbackURI("github", callbackURI)
+			if tt.wantStatus == http.StatusOK {
+				require.NoError(t, err)
+				assert.Equal(t, callbackURI, validatedCallback)
+			} else {
+				assert.Error(t, err)
+				assert.Empty(t, validatedCallback)
+			}
 		})
 	}
 }
@@ -495,6 +558,7 @@ func TestOAuthLoginConsumesFlowOnlyAfterProviderIdentity(t *testing.T) {
 			router := gin.New()
 			router.GET("/api/oauth/:provider", HandleOAuth)
 			request := httptest.NewRequest(http.MethodGet, "/api/oauth/auth-flow-test?state="+token+"&code=test", nil)
+			setOAuthCallbackRequestHost(t, request, system_setting.ServerAddress)
 			response := httptest.NewRecorder()
 			router.ServeHTTP(response, request)
 
@@ -533,6 +597,7 @@ func TestOAuthExchangeUsesTheStateBoundCallbackURI(t *testing.T) {
 	router := gin.New()
 	router.GET("/api/oauth/:provider", HandleOAuth)
 	request := httptest.NewRequest(http.MethodGet, "/api/oauth/github?state="+flowToken+"&code=test", nil)
+	request.Host = "llmapi.withcortex.ai"
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
 
@@ -566,6 +631,7 @@ func TestOAuthExchangeUsesTheStateBoundInsecureLoopbackCallbackURI(t *testing.T)
 	router := gin.New()
 	router.GET("/api/oauth/:provider", HandleOAuth)
 	request := httptest.NewRequest(http.MethodGet, "/api/oauth/auth-flow-test?state="+flowToken+"&code=test", nil)
+	request.Host = "localhost:5173"
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
 
@@ -586,6 +652,7 @@ func TestOAuthLoginConsumesFlowAfterProviderIdentityAndOnProviderError(t *testin
 	router := gin.New()
 	router.GET("/api/oauth/:provider", HandleOAuth)
 	request := httptest.NewRequest(http.MethodGet, "/api/oauth/auth-flow-test?state="+successToken+"&code=test", nil)
+	setOAuthCallbackRequestHost(t, request, system_setting.ServerAddress)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
 	_, err = model.GetAuthFlow(successToken, model.AuthFlowMatch{Purpose: model.AuthFlowPurposeOAuth})
@@ -599,6 +666,7 @@ func TestOAuthLoginConsumesFlowAfterProviderIdentityAndOnProviderError(t *testin
 	})
 	require.NoError(t, err)
 	request = httptest.NewRequest(http.MethodGet, "/api/oauth/auth-flow-test?state="+providerErrorToken+"&error=access_denied", nil)
+	setOAuthCallbackRequestHost(t, request, system_setting.ServerAddress)
 	response = httptest.NewRecorder()
 	router.ServeHTTP(response, request)
 	_, err = model.GetAuthFlow(providerErrorToken, model.AuthFlowMatch{Purpose: model.AuthFlowPurposeOAuth})
@@ -624,6 +692,7 @@ func TestOAuthBindProviderErrorConsumesSessionBoundFlow(t *testing.T) {
 	})
 	router.GET("/api/oauth/:provider", HandleOAuth)
 	request := httptest.NewRequest(http.MethodGet, "/api/oauth/auth-flow-test?state="+flowToken+"&error=access_denied&error_description=cancelled", nil)
+	setOAuthCallbackRequestHost(t, request, system_setting.ServerAddress)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
 
@@ -632,4 +701,49 @@ func TestOAuthBindProviderErrorConsumesSessionBoundFlow(t *testing.T) {
 	assert.ErrorIs(t, err, model.ErrAuthFlowConsumed)
 	assert.Zero(t, provider.exchangeCalls)
 	assert.Zero(t, provider.userInfoCalls)
+}
+
+func TestOAuthCallbackRejectsCanonicalStateOnModelVisaHost(t *testing.T) {
+	provider := setupAuthFlowControllerTest(t)
+	previousAddress := system_setting.ServerAddress
+	previousTrustedURLs := common.SessionCookieTrustedURLs
+	system_setting.ServerAddress = "https://newapi.withcortex.ai"
+	common.SessionCookieTrustedURLs = []string{modelVisaServerAddress}
+	t.Cleanup(func() {
+		system_setting.ServerAddress = previousAddress
+		common.SessionCookieTrustedURLs = previousTrustedURLs
+	})
+
+	flowToken, _, err := model.CreateAuthFlow(model.AuthFlowCreate{
+		Purpose: model.AuthFlowPurposeOAuth, Provider: "auth-flow-test", Intent: model.AuthFlowIntentLogin,
+		Payload:   `{"redirect_uri":"https://newapi.withcortex.ai/oauth/auth-flow-test"}`,
+		ExpiresAt: time.Now().Add(time.Minute),
+	})
+	require.NoError(t, err)
+
+	router := gin.New()
+	router.GET("/api/oauth/:provider", HandleOAuth)
+	request := httptest.NewRequest(http.MethodGet, "/api/oauth/auth-flow-test?state="+flowToken+"&code=test", nil)
+	request.Host = modelVisaHost
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+
+	assert.Equal(t, http.StatusForbidden, response.Code)
+	assert.Zero(t, provider.exchangeCalls)
+	assert.Zero(t, provider.userInfoCalls)
+}
+
+func TestOAuthCallbackAllowsConfiguredAliasBehindCanonicalProxy(t *testing.T) {
+	previousAddress := system_setting.ServerAddress
+	previousTrustedURLs := common.SessionCookieTrustedURLs
+	system_setting.ServerAddress = "https://newapi.withcortex.ai"
+	common.SessionCookieTrustedURLs = []string{"https://newapicn.withcortex.ai"}
+	t.Cleanup(func() {
+		system_setting.ServerAddress = previousAddress
+		common.SessionCookieTrustedURLs = previousTrustedURLs
+	})
+
+	request := httptest.NewRequest(http.MethodGet, "/oauth/github", nil)
+	request.Host = "newapi.withcortex.ai"
+	assert.True(t, oauthCallbackMatchesRequestHost(request, "https://newapicn.withcortex.ai/oauth/github"))
 }
