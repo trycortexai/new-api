@@ -5,6 +5,13 @@ API deployment. Credentials are never stored here.
 
 ## Method
 
+Run the checked-in benchmark script with either regional target:
+
+```sh
+NEW_API_BENCHMARK_KEY=... node scripts/benchmark-regions.mjs --sg
+NEW_API_BENCHMARK_KEY=... node scripts/benchmark-regions.mjs --nyc
+```
+
 - Endpoint: `POST /v1/chat/completions`
 - Client location: Shanghai, using the same macOS host for both regions
 - Input: `echo hi`
